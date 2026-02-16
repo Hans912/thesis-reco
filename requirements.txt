@@ -1,0 +1,10 @@
+requests
+beautifulsoup4
+lxml
+extruct
+w3lib
+tenacity
+tqdm
+pillow
+pandas
+numpy

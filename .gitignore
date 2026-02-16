@@ -1,0 +1,13 @@
+.venv/
+
+__pycache__/
+
+.DS_Store
+
+# Data artifacts
+data/
+reports/
+*.sqlite
+*.parquet
+*.csv
+*.faiss
