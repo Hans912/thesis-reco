@@ -8,14 +8,14 @@ Covers two verticals: **Arcaplanet** (pet supplies) and **Twinset** (fashion).
 | Step | Status | Description |
 |------|--------|-------------|
 | 1. Scraping pipeline | Done | Hardened scrapers for Arcaplanet & Twinset with session reuse, logging, image download |
-| 2. Embedding pipeline | Done | OpenCLIP ViT-B-32 multimodal embeddings + FAISS index |
+| 2. Embedding pipeline | Done | OpenCLIP ViT-B-32 multimodal embeddings + numpy cosine search |
 | 3. Recommendation API | Next | REST API serving similarity-based recommendations |
 | 4. Evaluation | Planned | Offline metrics (precision@k, nDCG) and qualitative analysis |
 
 ## Catalog
 
-- **647 products** (500 Arcaplanet, 147 Twinset)
-- **~2,777 images** downloaded locally
+- **647 products** (500 Arcaplanet, 147 Twinset), **634 valid** (after filtering empty names/zero images)
+- **~2,776 images** downloaded locally
 - SQLite database at `data/catalog.sqlite`
 
 ## Setup (macOS)
@@ -34,25 +34,25 @@ python -m scrapers.twinset --max-pages 5 --limit 500 --download-images
 ```
 
 Artifacts:
-- `data/catalog.sqlite`
-- `data/images/<merchant>/<product_id>/<idx>.jpg`
+- `data/catalog.sqlite` — product catalog (SQLite)
+- `data/images/<merchant>/<product_id>/<idx>.jpg` — product images
 
 ## 2. Build embedding index
 
 ```bash
-python -m pipelines.embed -v
+python -m pipelines.embed
 ```
 
 Options:
 - `--force` — re-embed all products (ignores existing index)
-- `--device cpu|cuda|mps` — override device auto-detection
-- `--batch-size 32` — image batch size for CLIP encoder
+- `--device cpu|cuda|mps` — override device auto-detection (default: MPS on Apple Silicon, else CPU)
+- `--batch-size 32` — batch size for CLIP encoder
 
 Artifacts:
-- `data/catalog.faiss` — FAISS inner-product index (~634 vectors x 512 dims)
-- `data/catalog_meta.parquet` — metadata (product_id, merchant, name, price, currency, url)
+- `data/catalog_embeddings.npy` — embedding matrix (634 x 512, ~1.3 MB)
+- `data/catalog_meta.parquet` — product metadata (product_id, merchant, name, price, currency, url)
 
-**How it works:** Each product gets a fused embedding = average of (mean CLIP image embedding, CLIP text embedding of `"{name}. {description[:200]}"`), L2-normalized. Products with no valid name or zero images are filtered out (~13 Twinset products).
+**How it works:** Each product gets a fused embedding = average of (mean CLIP image embedding, CLIP text embedding of `"{name}. {description[:200]}"`), L2-normalized. Products with no valid name or zero images are filtered out (~13 Twinset products). Similarity search uses numpy dot product on normalized vectors (equivalent to cosine similarity).
 
 ## 3. Search the index (verification)
 
@@ -76,5 +76,9 @@ Install **DB Browser for SQLite** (free) and open `data/catalog.sqlite`.
 
 - **Scraping:** requests, BeautifulSoup, extruct (JSON-LD)
 - **Embeddings:** OpenCLIP ViT-B-32 (`laion2b_s34b_b79k`), 512-dim shared image-text space
-- **Index:** FAISS `IndexFlatIP` (brute-force cosine similarity on normalized vectors)
-- **Storage:** SQLite (catalog), Parquet (metadata), local filesystem (images)
+- **Search:** numpy brute-force cosine similarity (sufficient for ~634 products)
+- **Storage:** SQLite (catalog), Parquet (metadata), npy (embeddings), local filesystem (images)
+
+## Known Issues
+
+- `faiss-cpu` causes a deadlock with PyTorch on macOS (OpenMP threading conflict). Use numpy-based search instead — performance is identical at this catalog size.

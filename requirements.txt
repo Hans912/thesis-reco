@@ -10,4 +10,4 @@ pandas
 numpy
 open_clip_torch
 torch
-faiss-cpu
+pyarrow
