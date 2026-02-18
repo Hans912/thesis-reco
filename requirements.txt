@@ -11,3 +11,7 @@ numpy
 open_clip_torch
 torch
 pyarrow
+fastapi
+uvicorn[standard]
+python-multipart
+streamlit

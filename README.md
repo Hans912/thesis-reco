@@ -9,7 +9,7 @@ Covers two verticals: **Arcaplanet** (pet supplies) and **Twinset** (fashion).
 |------|--------|-------------|
 | 1. Scraping pipeline | Done | Hardened scrapers for Arcaplanet & Twinset with session reuse, logging, image download |
 | 2. Embedding pipeline | Done | OpenCLIP ViT-B-32 multimodal embeddings + numpy cosine search |
-| 3. Recommendation API | Next | REST API serving similarity-based recommendations |
+| 3. Recommendation API + UI | Done | FastAPI REST API + Streamlit frontend |
 | 4. Evaluation | Planned | Offline metrics (precision@k, nDCG) and qualitative analysis |
 
 ## Catalog
@@ -54,7 +54,32 @@ Artifacts:
 
 **How it works:** Each product gets a fused embedding = average of (mean CLIP image embedding, CLIP text embedding of `"{name}. {description[:200]}"`), L2-normalized. Products with no valid name or zero images are filtered out (~13 Twinset products). Similarity search uses numpy dot product on normalized vectors (equivalent to cosine similarity).
 
-## 3. Search the index (verification)
+## 3. Run the application
+
+Start the API and frontend in two separate terminals:
+
+```bash
+# Terminal 1 — API server (loads CLIP model, serves recommendations)
+uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+# Terminal 2 — Streamlit frontend
+streamlit run app/streamlit_app.py
+```
+
+- API docs (Swagger UI): `http://localhost:8000/docs`
+- Streamlit app: `http://localhost:8501`
+
+**API endpoints:**
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/products` | Browse catalog (paginated, optional `?merchant=` filter) |
+| GET | `/api/products/{id}` | Product detail with all images |
+| GET | `/api/products/{id}/similar` | "More like this" recommendations |
+| GET | `/api/search/text?q=...` | Text search via CLIP |
+| POST | `/api/search/image` | Image upload search via CLIP |
+
+## 4. Search the index (CLI verification)
 
 ```bash
 python -m pipelines.search --query "cibo per gatti" --top-k 5
@@ -77,6 +102,8 @@ Install **DB Browser for SQLite** (free) and open `data/catalog.sqlite`.
 - **Scraping:** requests, BeautifulSoup, extruct (JSON-LD)
 - **Embeddings:** OpenCLIP ViT-B-32 (`laion2b_s34b_b79k`), 512-dim shared image-text space
 - **Search:** numpy brute-force cosine similarity (sufficient for ~634 products)
+- **API:** FastAPI (REST), uvicorn (ASGI server)
+- **Frontend:** Streamlit
 - **Storage:** SQLite (catalog), Parquet (metadata), npy (embeddings), local filesystem (images)
 
 ## Known Issues
