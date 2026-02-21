@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from dotenv import load_dotenv
+load_dotenv()
+
+import base64
 import sqlite3
 import tempfile
 from contextlib import asynccontextmanager
@@ -10,14 +14,26 @@ from typing import List, Optional
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, Query, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from api.models import (
+    ChatRequest,
+    ChatResponse,
+    EvaluationResults,
+    FavoriteItem,
+    FavoriteRequest,
+    FavoritesResponse,
     ProductDetail,
     ProductListResponse,
     ProductSummary,
+    Profile,
     SearchResponse,
     SearchResult,
+    Store,
+    StoreListResponse,
+    StoreRecommendation,
+    StoreRecommendationResponse,
 )
 from pipelines.embed import DB_PATH, ROOT, pick_device
 from pipelines.search import (
@@ -119,12 +135,38 @@ async def lifespan(app: FastAPI):
     app.state.device = device
     app.state.conn = conn
 
+    # Load collaborative filtering matrices if transaction data exists
+    try:
+        from pipelines.collab import build_store_product_matrix, build_customer_store_matrix
+
+        sp_matrix, sp_store_ids, sp_product_ids = build_store_product_matrix(conn)
+        cs_matrix, cs_customer_ids, cs_store_ids = build_customer_store_matrix(conn)
+        app.state.sp_matrix = sp_matrix
+        app.state.sp_store_ids = sp_store_ids
+        app.state.cs_matrix = cs_matrix
+        app.state.cs_customer_ids = cs_customer_ids
+        app.state.cs_store_ids = cs_store_ids
+        print(f"Collab matrices loaded: {sp_matrix.shape[0]} stores x {sp_matrix.shape[1]} products, "
+              f"{cs_matrix.shape[0]} customers x {cs_matrix.shape[1]} stores", flush=True)
+    except Exception as e:
+        print(f"Collab filtering not available: {e}", flush=True)
+        app.state.sp_matrix = None
+        app.state.cs_matrix = None
+
     yield
 
     conn.close()
 
 
 app = FastAPI(title="Thesis Reco API", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Serve product images as static files
 IMAGES_DIR = ROOT / "data" / "images"
@@ -265,3 +307,259 @@ async def image_search(
     results = _df_to_search_results(results_df, app.state.conn)
 
     return SearchResponse(query_type="image", results=results)
+
+
+@app.post("/api/chat", response_model=ChatResponse)
+async def chat_endpoint(request: ChatRequest):
+    """Conversational product recommendation via GPT-4o-mini with tool calling."""
+    from api.chat import chat
+
+    image_bytes = None
+    if request.image:
+        try:
+            image_bytes = base64.b64decode(request.image)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid base64 image")
+
+    messages = [{"role": m.role, "content": m.content} for m in request.messages]
+    result = await chat(messages, image_bytes, app.state)
+
+    return ChatResponse(
+        message=result["message"],
+        products=result.get("products"),
+        follow_up_questions=result.get("follow_up_questions"),
+        stores=result.get("stores"),
+    )
+
+
+@app.get("/api/stores", response_model=StoreListResponse)
+def list_stores(
+    merchant: Optional[str] = Query(None, description="Filter by merchant"),
+):
+    """List store locations, optionally filtered by merchant."""
+    conn = app.state.conn
+
+    # Check if stores table exists
+    table_check = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='stores'"
+    ).fetchone()
+    if not table_check:
+        return StoreListResponse(stores=[])
+
+    if merchant:
+        rows = conn.execute(
+            "SELECT store_id, merchant, display_name, lat, lng, street, street_number, zip_code, google_place_id "
+            "FROM stores WHERE merchant = ? ORDER BY display_name",
+            (merchant,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT store_id, merchant, display_name, lat, lng, street, street_number, zip_code, google_place_id "
+            "FROM stores ORDER BY merchant, display_name",
+        ).fetchall()
+
+    stores = [
+        Store(
+            store_id=r[0], merchant=r[1], display_name=r[2],
+            lat=r[3], lng=r[4], street=r[5], street_number=r[6],
+            zip_code=r[7], google_place_id=r[8],
+        )
+        for r in rows
+    ]
+    return StoreListResponse(stores=stores)
+
+
+# ── Favorites ───────────────────────────────────────────────────────────
+
+@app.get("/api/favorites", response_model=FavoritesResponse)
+def get_favorites(session_id: str = Query(..., description="Session or profile ID")):
+    """List all favorited products for a session."""
+    conn = app.state.conn
+    rows = conn.execute(
+        """SELECT f.product_id, f.added_at, p.merchant, p.name, p.price, p.currency, p.url
+           FROM favorites f
+           JOIN products p ON f.product_id = p.product_id
+           WHERE f.session_id = ?
+           ORDER BY f.added_at DESC""",
+        (session_id,),
+    ).fetchall()
+
+    items = []
+    for r in rows:
+        img = _first_image_url(conn, r[0])
+        items.append(FavoriteItem(
+            product_id=r[0], added_at=r[1], merchant=r[2], name=r[3],
+            price=r[4], currency=r[5], url=r[6], image_url=img,
+        ))
+    return FavoritesResponse(favorites=items)
+
+
+@app.post("/api/favorites", status_code=201)
+def add_favorite(req: FavoriteRequest):
+    """Add a product to favorites."""
+    conn = app.state.conn
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO favorites (session_id, product_id, added_at) VALUES (?, ?, ?)",
+            (req.session_id, req.product_id, now),
+        )
+        conn.commit()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"ok": True}
+
+
+@app.delete("/api/favorites/{product_id}")
+def remove_favorite(
+    product_id: str,
+    session_id: str = Query(..., description="Session or profile ID"),
+):
+    """Remove a product from favorites."""
+    conn = app.state.conn
+    conn.execute(
+        "DELETE FROM favorites WHERE session_id = ? AND product_id = ?",
+        (session_id, product_id),
+    )
+    conn.commit()
+    return {"ok": True}
+
+
+# ── Collaborative Filtering ─────────────────────────────────────────────
+
+@app.get("/api/stores/{store_id}/similar", response_model=StoreRecommendationResponse)
+def get_similar_stores(store_id: str, top_k: int = Query(5, ge=1, le=20)):
+    """Item-based CF: find stores with a similar product mix."""
+    if app.state.sp_matrix is None:
+        raise HTTPException(status_code=503, detail="Collaborative filtering not available")
+
+    from pipelines.collab import similar_stores
+
+    results = similar_stores(
+        store_id, app.state.sp_matrix, app.state.sp_store_ids,
+        app.state.conn, top_k=top_k,
+    )
+    return StoreRecommendationResponse(
+        method="item_based",
+        results=[StoreRecommendation(**r) for r in results],
+    )
+
+
+@app.get("/api/recommend/stores", response_model=StoreRecommendationResponse)
+def recommend_stores(
+    customer_id: str = Query(None, description="Customer ID from profile"),
+    profile_id: str = Query(None, description="Profile ID to look up customer_id"),
+    top_k: int = Query(5, ge=1, le=20),
+):
+    """User-based CF: recommend stores based on co-shopping patterns."""
+    if app.state.cs_matrix is None:
+        raise HTTPException(status_code=503, detail="Collaborative filtering not available")
+
+    # Resolve customer_id from profile if needed
+    if not customer_id and profile_id:
+        profiles = _load_profiles()
+        for p in profiles:
+            if p["profile_id"] == profile_id:
+                customer_id = p.get("customer_id")
+                break
+
+    if not customer_id:
+        raise HTTPException(status_code=400, detail="customer_id or valid profile_id required")
+
+    from pipelines.collab import recommend_stores_for_customer
+
+    results = recommend_stores_for_customer(
+        customer_id, app.state.cs_matrix, app.state.cs_customer_ids,
+        app.state.cs_store_ids, app.state.conn, top_k=top_k,
+    )
+    return StoreRecommendationResponse(
+        method="user_based",
+        results=[StoreRecommendation(**r) for r in results],
+    )
+
+
+# ── Evaluation ──────────────────────────────────────────────────────────
+
+@app.get("/api/evaluation/results", response_model=EvaluationResults)
+def evaluation_results(k: int = Query(5, ge=1, le=20)):
+    """Run offline evaluation of all 5 recommendation models."""
+    # Check cache
+    cache = getattr(app.state, "_eval_cache", {})
+    if k in cache:
+        return cache[k]
+
+    from pipelines.evaluation import run_full_evaluation
+
+    results = run_full_evaluation(
+        matrix=app.state.matrix,
+        meta=app.state.meta,
+        sp_matrix=app.state.sp_matrix,
+        sp_store_ids=getattr(app.state, "sp_store_ids", None),
+        cs_matrix=app.state.cs_matrix,
+        cs_customer_ids=getattr(app.state, "cs_customer_ids", None),
+        cs_store_ids=getattr(app.state, "cs_store_ids", None),
+        conn=app.state.conn,
+        k=k,
+    )
+
+    # Cache results
+    if not hasattr(app.state, "_eval_cache"):
+        app.state._eval_cache = {}
+    app.state._eval_cache[k] = results
+
+    return results
+
+
+# ── Profiles ────────────────────────────────────────────────────────────
+
+import json as _json
+
+_PROFILES_PATH = ROOT / "data" / "mock_profiles.json"
+
+
+def _load_profiles() -> list[dict]:
+    if _PROFILES_PATH.exists():
+        with open(_PROFILES_PATH) as f:
+            return _json.load(f)
+    return []
+
+
+@app.get("/api/profiles", response_model=list[Profile])
+def list_profiles():
+    """List available user profiles for the CF demo."""
+    return [Profile(**p) for p in _load_profiles()]
+
+
+@app.get("/api/profiles/{profile_id}/top-store")
+def profile_top_store(profile_id: str):
+    """Return the most-visited store for a profile's customer."""
+    profiles = _load_profiles()
+    customer_id = None
+    for p in profiles:
+        if p["profile_id"] == profile_id:
+            customer_id = p.get("customer_id")
+            break
+    if not customer_id:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    row = app.state.conn.execute(
+        "SELECT store_id, COUNT(*) as cnt FROM transactions "
+        "WHERE customer_id = ? GROUP BY store_id ORDER BY cnt DESC LIMIT 1",
+        (customer_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="No transactions for this profile")
+
+    profile_row = app.state.conn.execute(
+        "SELECT merchant_name, city FROM store_profiles WHERE store_id = ?",
+        (row[0],),
+    ).fetchone()
+
+    return {
+        "store_id": row[0],
+        "visit_count": row[1],
+        "merchant_name": profile_row[0] if profile_row else None,
+        "city": profile_row[1] if profile_row else None,
+    }

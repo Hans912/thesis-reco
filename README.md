@@ -1,6 +1,6 @@
 # Multimodal Product Recommendation System (Thesis)
 
-Cross-merchant product recommendation engine using CLIP multimodal embeddings.
+Cross-merchant product recommendation engine using CLIP multimodal embeddings and a conversational AI chatbot.
 Covers two verticals: **Arcaplanet** (pet supplies) and **Twinset** (fashion).
 
 ## Project Status
@@ -9,8 +9,19 @@ Covers two verticals: **Arcaplanet** (pet supplies) and **Twinset** (fashion).
 |------|--------|-------------|
 | 1. Scraping pipeline | Done | Hardened scrapers for Arcaplanet & Twinset with session reuse, logging, image download |
 | 2. Embedding pipeline | Done | OpenCLIP ViT-B-32 multimodal embeddings + numpy cosine search |
-| 3. Recommendation API + UI | Done | FastAPI REST API + Streamlit frontend |
-| 4. Evaluation | Planned | Offline metrics (precision@k, nDCG) and qualitative analysis |
+| 3. Recommendation API | Done | FastAPI REST API with CLIP search endpoints |
+| 4. Chatbot frontend | Done | React + GPT-4o-mini conversational recommender with tool calling |
+| 5. Evaluation | Done | Offline metrics (Precision@K, Recall@K, nDCG@K, Hit Rate@K, Coverage, Diversity) across 5 models |
+
+## Pages
+
+| Route | Page | Content |
+|-------|------|---------|
+| `/` | Landing | Full-screen profile picker — select a profile or Guest before entering |
+| `/recommend` | Recommender | CF store recommendations (top) + chatbot product search (bottom) |
+| `/browse` | Browse | Paginated product catalog with merchant filter and favorites |
+| `/map` | Map | Interactive Leaflet map of store locations |
+| `/eval` | Evaluation | Model comparison dashboard — 5 models x 6 metrics with bar charts |
 
 ## Catalog
 
@@ -24,6 +35,13 @@ Covers two verticals: **Arcaplanet** (pet supplies) and **Twinset** (fashion).
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+```
+
+For the frontend (requires Node.js 20+):
+
+```bash
+cd frontend
+npm install
 ```
 
 ## 1. Run scrapers
@@ -56,18 +74,24 @@ Artifacts:
 
 ## 3. Run the application
 
+Set your OpenAI API key:
+
+```bash
+export OPENAI_API_KEY=sk-...
+```
+
 Start the API and frontend in two separate terminals:
 
 ```bash
-# Terminal 1 — API server (loads CLIP model, serves recommendations)
+# Terminal 1 — API server (loads CLIP model, serves recommendations + chatbot)
 uvicorn api.main:app --host 0.0.0.0 --port 8000
 
-# Terminal 2 — Streamlit frontend
-streamlit run app/streamlit_app.py
+# Terminal 2 — React frontend
+cd frontend && npm run dev
 ```
 
+- Frontend: `http://localhost:5173`
 - API docs (Swagger UI): `http://localhost:8000/docs`
-- Streamlit app: `http://localhost:8501`
 
 **API endpoints:**
 
@@ -78,6 +102,12 @@ streamlit run app/streamlit_app.py
 | GET | `/api/products/{id}/similar` | "More like this" recommendations |
 | GET | `/api/search/text?q=...` | Text search via CLIP |
 | POST | `/api/search/image` | Image upload search via CLIP |
+| POST | `/api/chat` | Conversational chatbot (GPT-4o-mini + tool calling) |
+| GET | `/api/stores` | Store locations (optional `?merchant=` filter) |
+| GET | `/api/stores/{id}/similar` | Item-based CF: similar stores |
+| GET | `/api/recommend/stores` | User-based CF: store recommendations |
+| GET | `/api/profiles` | Available user profiles |
+| GET | `/api/evaluation/results?k=5` | Offline evaluation results (k=3, 5, or 10) |
 
 ## 4. Search the index (CLI verification)
 
@@ -87,15 +117,21 @@ python -m pipelines.search --query "vestido donna" --top-k 5
 python -m pipelines.search --image data/images/twinset/.../0.jpg --top-k 5
 ```
 
-## Inspect scraped data
+## Evaluation
 
-```bash
-python scripts/summary.py
-```
+The evaluation dashboard (`/eval`) compares 5 recommendation models:
 
-## View SQLite in a GUI
+| Model | Method |
+|-------|--------|
+| Content-Based (CLIP) | Self-retrieval with same-merchant relevance |
+| Item-Based CF | Leave-one-out on store-product similarity |
+| User-Based CF | Leave-one-out on customer-store patterns |
+| Random Baseline | Uniform random selection |
+| Popularity Baseline | Most-visited stores / largest merchant group |
 
-Install **DB Browser for SQLite** (free) and open `data/catalog.sqlite`.
+Metrics computed: Precision@K, Recall@K, nDCG@K, Hit Rate@K, Coverage, Diversity.
+
+Results are cached server-side after first computation.
 
 ## Tech Stack
 
@@ -103,7 +139,8 @@ Install **DB Browser for SQLite** (free) and open `data/catalog.sqlite`.
 - **Embeddings:** OpenCLIP ViT-B-32 (`laion2b_s34b_b79k`), 512-dim shared image-text space
 - **Search:** numpy brute-force cosine similarity (sufficient for ~634 products)
 - **API:** FastAPI (REST), uvicorn (ASGI server)
-- **Frontend:** Streamlit
+- **Chatbot:** GPT-4o-mini with tool calling (OpenAI API)
+- **Frontend:** React 18, Vite, Tailwind CSS
 - **Storage:** SQLite (catalog), Parquet (metadata), npy (embeddings), local filesystem (images)
 
 ## Known Issues

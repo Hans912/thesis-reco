@@ -14,4 +14,8 @@ pyarrow
 fastapi
 uvicorn[standard]
 python-multipart
-streamlit
+openai
+python-dotenv
+openpyxl
+scipy
+scikit-learn

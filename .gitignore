@@ -4,6 +4,7 @@
 __pycache__/
 
 .DS_Store
+.env
 
 # Data artifacts
 data/
@@ -12,3 +13,7 @@ reports/
 *.parquet
 *.csv
 *.faiss
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
