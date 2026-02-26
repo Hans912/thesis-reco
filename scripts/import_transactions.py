@@ -6,8 +6,44 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = ROOT / "data" / "catalog.sqlite"
-TRANSACTIONS_CSV = ROOT / "data" / "test_month_transaction_product.csv"
-STORE_PROFILES_CSV = ROOT / "data" / "test_store_location_transaction.csv"
+TRANSACTIONS_CSV = ROOT / "data" / "final_transaction_data.csv"
+STORE_PROFILES_CSV = ROOT / "data" / "final_store_profile_transaction.csv"
+
+
+def init_transaction_tables(conn: sqlite3.Connection) -> None:
+    """Create transaction-related tables if they don't exist."""
+    cur = conn.cursor()
+
+    cur.execute("""CREATE TABLE IF NOT EXISTS transactions(
+        invoice_id TEXT NOT NULL,
+        product_id TEXT NOT NULL,
+        line_num INTEGER NOT NULL DEFAULT 0,
+        customer_id TEXT NOT NULL,
+        store_id TEXT NOT NULL,
+        merchant_id TEXT NOT NULL,
+        description TEXT,
+        qty REAL,
+        unit_price REAL,
+        vat_rate REAL,
+        issued_on TEXT,
+        PRIMARY KEY(invoice_id, product_id, line_num)
+    )""")
+
+    cur.execute("""CREATE TABLE IF NOT EXISTS store_profiles(
+        store_id TEXT PRIMARY KEY,
+        merchant_id TEXT NOT NULL,
+        merchant_name TEXT,
+        city TEXT,
+        revenue REAL,
+        num_invoices INTEGER,
+        num_distinct_products INTEGER,
+        median_unit_price REAL
+    )""")
+
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_customer ON transactions(customer_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_store ON transactions(store_id)")
+
+    conn.commit()
 
 
 def import_transactions(conn: sqlite3.Connection) -> int:
@@ -23,12 +59,13 @@ def import_transactions(conn: sqlite3.Connection) -> int:
         for row in reader:
             cur.execute(
                 """INSERT OR IGNORE INTO transactions
-                   (invoice_id, product_id, customer_id, store_id, merchant_id,
+                   (invoice_id, product_id, line_num, customer_id, store_id, merchant_id,
                     description, qty, unit_price, vat_rate, issued_on)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     row["invoice_id"],
                     row["product_id"],
+                    int(row["line_num"]) if row.get("line_num") else 0,
                     row["CustomerId"],
                     row["StoreId"],
                     row["MerchantId"],
@@ -79,9 +116,12 @@ def import_store_profiles(conn: sqlite3.Connection) -> int:
 if __name__ == "__main__":
     conn = sqlite3.connect(str(DB_PATH))
 
-    # Ensure tables exist
+    # Ensure scraping tables exist (products, product_images, stores, favorites)
     from scrapers.common import init_db
     init_db(str(DB_PATH))
+
+    # Ensure transaction tables exist
+    init_transaction_tables(conn)
 
     print("Importing transactions...")
     n_txn = import_transactions(conn)

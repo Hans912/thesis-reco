@@ -17,6 +17,9 @@ const MODEL_COLORS = {
   'Content-Based (CLIP)': 'bg-blue-500',
   'Item-Based CF': 'bg-green-500',
   'User-Based CF': 'bg-purple-500',
+  'ALS': 'bg-cyan-500',
+  'LightFM WARP': 'bg-rose-500',
+  'LightFM Hybrid': 'bg-amber-500',
   'Random Baseline': 'bg-gray-400',
   'Popularity Baseline': 'bg-orange-400',
 }
@@ -72,7 +75,7 @@ export default function EvalPage() {
             Model Evaluation
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Comparing 5 recommendation models across 6 IR metrics.
+            Comparing 8 recommendation models across 6 IR metrics.
           </p>
         </div>
 

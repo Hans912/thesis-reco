@@ -90,36 +90,9 @@ def init_db(db_path="data/catalog.sqlite"):
         PRIMARY KEY(session_id, product_id)
     )""")
 
-    cur.execute("""CREATE TABLE IF NOT EXISTS transactions(
-        invoice_id TEXT NOT NULL,
-        product_id TEXT NOT NULL,
-        customer_id TEXT NOT NULL,
-        store_id TEXT NOT NULL,
-        merchant_id TEXT NOT NULL,
-        description TEXT,
-        qty REAL,
-        unit_price REAL,
-        vat_rate REAL,
-        issued_on TEXT,
-        PRIMARY KEY(invoice_id, product_id)
-    )""")
-
-    cur.execute("""CREATE TABLE IF NOT EXISTS store_profiles(
-        store_id TEXT PRIMARY KEY,
-        merchant_id TEXT NOT NULL,
-        merchant_name TEXT,
-        city TEXT,
-        revenue REAL,
-        num_invoices INTEGER,
-        num_distinct_products INTEGER,
-        median_unit_price REAL
-    )""")
-
     cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_products_merchant_url ON products(merchant, url)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_products_merchant_scraped_at ON products(merchant, scraped_at)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_stores_merchant ON stores(merchant)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_customer ON transactions(customer_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_store ON transactions(store_id)")
 
     conn.commit()
     return conn

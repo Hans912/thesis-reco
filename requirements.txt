@@ -19,3 +19,5 @@ python-dotenv
 openpyxl
 scipy
 scikit-learn
+implicit
+lightfm @ git+https://github.com/lyst/lightfm.git

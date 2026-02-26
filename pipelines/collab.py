@@ -17,6 +17,14 @@ from scipy import sparse
 from sklearn.metrics.pairwise import cosine_similarity
 
 
+def _build_merchant_store_map(conn: sqlite3.Connection) -> dict[str, str]:
+    """Build mapping from store_id to 'merchant_name|city' for dedup."""
+    rows = conn.execute(
+        "SELECT store_id, merchant_name, city FROM store_profiles"
+    ).fetchall()
+    return {r[0]: f"{r[1]}|{r[2]}" for r in rows if r[1]}
+
+
 def build_store_product_matrix(conn: sqlite3.Connection):
     """Build a sparse store x product matrix from transactions.
 
@@ -89,6 +97,7 @@ def similar_stores(
     """Find stores with the most similar product mix (item-based CF).
 
     Returns list of dicts with store_id, score, and profile info.
+    Deduplicates stores that share the same merchant+city.
     """
     if store_id not in store_ids:
         return []
@@ -99,19 +108,34 @@ def similar_stores(
 
     # Exclude self
     sims[idx] = -1
-    top_indices = np.argsort(sims)[::-1][:top_k]
+
+    # Build merchant+city dedup map
+    merchant_map = _build_merchant_store_map(conn)
+    query_key = merchant_map.get(store_id, "")
+
+    # Collect results, skipping stores with same merchant+city as query
+    seen_merchants = {query_key} if query_key else set()
+    top_indices = np.argsort(sims)[::-1]
 
     results = []
     for i in top_indices:
         if sims[i] <= 0:
             break
         sid = store_ids[i]
+        merchant_key = merchant_map.get(sid, sid)
+        if merchant_key in seen_merchants:
+            continue
+        seen_merchants.add(merchant_key)
+
         profile = _get_store_profile(conn, sid)
         results.append({
             "store_id": sid,
             "score": round(float(sims[i]), 4),
             **profile,
         })
+        if len(results) >= top_k:
+            break
+
     return results
 
 
@@ -126,6 +150,7 @@ def recommend_stores_for_customer(
     """Recommend stores for a customer based on co-shopping patterns (user-based CF).
 
     Finds similar customers, then recommends stores they visited that this customer hasn't.
+    Scores are normalized to [0, 1].
     """
     if customer_id not in customer_ids:
         return []
@@ -153,18 +178,42 @@ def recommend_stores_for_customer(
             if si not in visited:
                 store_scores[si] = store_scores.get(si, 0) + sims[ci]
 
-    # Sort by aggregated score
-    ranked = sorted(store_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+    if not store_scores:
+        return []
+
+    # Normalize scores to [0, 1]
+    max_score = max(store_scores.values())
+
+    # Build merchant+city dedup map
+    merchant_map = _build_merchant_store_map(conn)
+    visited_keys = set()
+    for si in visited:
+        key = merchant_map.get(store_ids[si], "")
+        if key:
+            visited_keys.add(key)
+
+    # Sort by aggregated score, dedup by merchant+city
+    ranked = sorted(store_scores.items(), key=lambda x: x[1], reverse=True)
+    seen_merchants = set(visited_keys)
 
     results = []
     for si, score in ranked:
         sid = store_ids[si]
+        merchant_key = merchant_map.get(sid, sid)
+        if merchant_key in seen_merchants:
+            continue
+        seen_merchants.add(merchant_key)
+
+        normalized_score = score / max_score if max_score > 0 else 0
         profile = _get_store_profile(conn, sid)
         results.append({
             "store_id": sid,
-            "score": round(float(score), 4),
+            "score": round(float(normalized_score), 4),
             **profile,
         })
+        if len(results) >= top_k:
+            break
+
     return results
 
 
