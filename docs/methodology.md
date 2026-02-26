@@ -96,35 +96,34 @@ Tax-free transaction data was extracted from a Databricks pipeline processing in
 
 ### 4.2 Data Volume
 
-The January 2025 test dataset contains:
+The initial dataset covered January 2025 only (24,665 items, 2,951 customers, 345 stores). Preliminary evaluation revealed that this single month of data was insufficient for collaborative filtering — 79.5% of customers had only one transaction, providing almost no co-shopping signal. The dataset was therefore expanded to approximately two years of transaction history:
 
-| Metric | Count |
-|--------|-------|
-| Transaction items | 24,665 |
-| Invoices | 3,865 |
-| Distinct customers | 2,951 |
-| Distinct merchants | 286 |
-| Distinct stores | 345 |
-| Distinct products (by normalized description) | 10,893 |
+| Metric | Jan 2025 Only | Multi-Year (Final) |
+|--------|---------------|-------------------|
+| Transaction items | 24,665 | 754,338 |
+| Invoices | 3,865 | 109,056 |
+| Distinct customers | 2,951 | 39,777 |
+| Distinct merchants | 286 | — |
+| Distinct stores | 345 | 776 |
+| Distinct products | 10,893 | 121,197 |
 
-### 4.3 Data Quality Assessment
+The multi-year expansion increased the number of customers with 2+ distinct store visits from ~590 to 8,572 — a 14× increase in leave-one-out test cases for CF evaluation.
+
+### 4.3 Duplicate Line Item Handling
+
+The original Databricks pipeline used `explode()` to unnest serialized invoice items, with a composite primary key of `(invoice_id, product_id)`. This caused silent data loss: when the same product appeared multiple times on a single invoice (e.g., same description but different prices or quantities), `INSERT OR IGNORE` would drop subsequent occurrences.
+
+The fix used `posexplode()` instead of `explode()`, which preserves the array position as a `line_num` column. The primary key was changed to `(invoice_id, product_id, line_num)`, ensuring every line item is preserved regardless of duplicate descriptions.
+
+### 4.4 Data Quality Assessment
 
 **Description quality varies dramatically by merchant type:**
 
-- **Fashion items** use extremely generic descriptions: "maglia" (knitwear) appears 357 times, "pantalone" (trousers) 270 times, "giacca" (jacket) 109 times. These descriptions carry almost no discriminative power — a "maglia" at a luxury boutique is indistinguishable from one at a discount store based on description alone.
+- **Fashion items** use extremely generic descriptions: "maglia" (knitwear), "pantalone" (trousers), "giacca" (jacket). These descriptions carry almost no discriminative power — a "maglia" at a luxury boutique is indistinguishable from one at a discount store based on description alone.
 - **Grocery items** are somewhat more specific: "prosciutto cotto t a gr 100" (cooked ham 100g) or "birra beck s cl.33x5 +1" (Beck's beer 33cl 5+1 pack). Weight/volume tokens add some differentiation.
 - **Non-food items** occasionally include brand names: "kindle 7 paperwhite 16gb 2024" provides strong product identity.
 
-**Extreme sparsity characterizes the transaction data:**
-
-| Metric | Value |
-|--------|-------|
-| Customers with exactly 1 transaction | 79.5% |
-| Products appearing exactly once | 65.0% |
-| Average items per invoice | 6.4 |
-| Median items per invoice | ~4 |
-
-This level of sparsity makes traditional product-level collaborative filtering impractical — most customer-product pairs are unobserved, and the product descriptions are too generic to create meaningful item embeddings from transaction data alone.
+**Sparsity remains a challenge** even with multi-year data, making traditional product-level collaborative filtering impractical. Store-level aggregation (Section 7) and model-based approaches with side features (Section 8) are the primary strategies for handling this sparsity.
 
 **Zero overlap with scraped catalog:** Transaction product IDs (SHA-256 of normalized description) share no overlap with scraped catalog product IDs (SHA-256 of merchant + URL). This is expected — the transaction data covers 286 merchants while the scraped catalog covers only 2, and the ID generation methods differ fundamentally.
 
@@ -212,7 +211,7 @@ Given the extreme sparsity of the transaction data (79.5% of customers have only
 **Approach:** Build a store-product interaction matrix where rows are stores, columns are product IDs, and values are total quantity sold. Compute pairwise cosine similarity between store vectors.
 
 ```
-Matrix dimensions: 345 stores × 10,893 products (sparse)
+Matrix dimensions: 776 stores × 121,197 products (sparse)
 Similarity: cosine_similarity(store_A, store_B)
 ```
 
@@ -220,36 +219,118 @@ Similarity: cosine_similarity(store_A, store_B)
 
 **Use case:** "Stores like this one" — given a store, find other stores with the most similar product mix. Useful for market analysis and cross-merchant discovery.
 
+**Store deduplication:** Multiple `store_id` values can map to the same physical location (e.g., 4 different store IDs for "Granmercato SPA" in "Como"). To prevent recommending the same physical store multiple times, results are deduplicated by the composite key `(merchant_name, city)`. Stores sharing this key with the query store are also excluded from similarity results.
+
 ### 7.3 User-Based CF (Co-Shopping Patterns)
 
 **Approach:** Build a customer-store matrix where rows are customers, columns are stores, and values are total spend. For a given customer, find similar customers via cosine similarity on store-visit vectors, then recommend stores that similar customers visited but the target customer hasn't.
 
 ```
-Matrix dimensions: 2,951 customers × 345 stores (sparse)
+Matrix dimensions: 39,777 customers × 776 stores (sparse)
 Steps: 1) Find top-20 similar customers
         2) Aggregate their unvisited stores weighted by similarity
-        3) Return top-k ranked stores
+        3) Normalize scores to [0, 1] range
+        4) Deduplicate by merchant+city
+        5) Return top-k ranked stores
 ```
 
 **Interpretation:** Customers who shop at similar stores likely have similar preferences. If customer A shops at stores X, Y, Z and similar customer B shops at X, Y, W, then W is a candidate recommendation for customer A.
 
-**Limitations:** With 79.5% of customers having only 1 transaction, most customer vectors are very sparse (single non-zero entry). The model works best for the ~20% of customers with repeat visits.
+**Score normalization:** Raw scores are the sum of similarity weights from multiple similar customers, which can exceed 1.0 (e.g., a store visited by 3 highly similar customers might accumulate a score of 1.78). Scores are normalized to [0, 1] by dividing by the maximum score in the recommendation set, making them interpretable as relative confidence.
+
+**Deduplication:** The same merchant+city exclusion applies as in item-based CF — stores sharing the same physical merchant and city as already-visited stores are removed from recommendations.
 
 ### 7.4 Mock Profiles for Demonstration
 
-Three mock profiles map to real customer IDs from the transaction data, each representing a distinct shopping pattern:
+Three mock profiles map to real customer IDs from the transaction data, each representing a distinct shopping pattern. With the multi-year data expansion, each profile now has significantly richer purchase histories:
 
-| Profile | Shopping Pattern | Merchants | Invoices |
-|---------|-----------------|-----------|----------|
-| Luca | Fashion enthusiast | Beat, FMC, Conceptlab | 6 |
-| Sofia | Grocery regular | Granmercato, area2rezzonico | 5 |
-| Maria | Versatile shopper | Bordoni, Peter Pan, Granmercato | 6 |
+| Profile | Shopping Pattern | Description |
+|---------|-----------------|-------------|
+| Luca | Fashion enthusiast | Frequent visits to fashion and lifestyle stores |
+| Sofia | Grocery regular | Consistent grocery shopping patterns |
+| Maria | Versatile shopper | Diverse shopping across multiple merchant categories |
 
 A Guest profile (no purchase history) demonstrates the system's fallback to content-based recommendations only.
 
-## 8. Favorites & User Interaction Data
+## 8. Model-Based Collaborative Filtering
 
-### 8.1 Purpose
+### 8.1 Motivation
+
+Memory-based CF (cosine similarity on raw interaction matrices) has well-known limitations: it struggles with sparse data, cannot generalize beyond observed co-occurrences, and scales poorly as the matrix grows. Model-based approaches address these by learning latent factor representations that compress the interaction signal and can generalize to unseen user-item pairs.
+
+Three model-based approaches were added alongside the existing memory-based CF, enabling a direct comparison between memory-based and model-based paradigms:
+
+### 8.2 ALS (Alternating Least Squares)
+
+**Model:** Weighted matrix factorization for implicit feedback, implemented via the `implicit` library (Hu, Koren, & Volinsky, 2008).
+
+**Approach:** Decomposes the customer-store interaction matrix into low-rank user and item factor matrices (64 dimensions each). Unlike SVD or NMF designed for explicit ratings, ALS treats all interactions as positive implicit feedback and uses confidence weighting — more visits to a store indicate stronger preference signal.
+
+**Configuration:** 64 latent factors, 30 iterations, regularization λ = 0.01. The interaction matrix uses visit counts (distinct invoice count per customer-store pair) rather than spend, providing more balanced signal across merchant price ranges.
+
+**Inference:** Recommendations are generated by computing the dot product of user factors with all item factors, filtering out already-visited stores.
+
+### 8.3 LightFM WARP
+
+**Model:** LightFM with Weighted Approximate-Rank Pairwise (WARP) loss (Kula, 2015).
+
+**Rationale for WARP loss:** Unlike pointwise losses (BPR, logistic) that treat each interaction independently, WARP directly optimizes for the top of the ranking. It samples negative items and applies larger gradient updates when high-ranked negatives are found, focusing learning effort on the most impactful ranking errors. This makes it particularly well-suited for top-k recommendation scenarios where only the first few results matter.
+
+**Advantages over ALS:**
+- **Ranking-optimized** — WARP loss directly optimizes for top-k precision, while ALS optimizes reconstruction error on the full matrix
+- **Feature support** — LightFM can incorporate side features (see Section 8.4), enabling cold-start mitigation
+- **Pairwise learning** — learns relative preference ordering rather than absolute scores
+
+**Configuration:** 64 latent components, WARP loss, learning rate 0.05, 30 epochs, 4 threads.
+
+### 8.4 LightFM Hybrid (WARP + Side Features)
+
+**Model:** LightFM with WARP loss plus both store profile and user behavior side features.
+
+**Item (store) features:** Each store is described by three categorical features derived from the `store_profiles` table:
+- **City** — e.g., "city:COMO"
+- **Size bin** — small (<100 products), medium (100–999), large (1000+)
+- **Price bin** — low (median price <€20), mid (€20–€100), high (>€100)
+
+Merchant name was deliberately excluded from store features — it is too specific and causes the model to only recommend stores from the same merchant, overriding the collaborative signal.
+
+**User features:** Each customer is described by three behavioral features computed from their training-period history:
+- **Visit frequency bin** — single (1 store), casual (2–3), regular (4–8), power (9+)
+- **Spend level bin** — low (<€200), mid (€200–€1000), high (>€1000)
+- **Primary city** — the city where the customer shops most frequently
+
+**Why side features matter:** Pure collaborative filtering cannot recommend stores with no interaction history (cold-start problem). By incorporating store profile and user behavior features, the hybrid model learns associations between feature patterns and preferences — e.g., "high-spending users in Como tend to visit mid-to-large stores in nearby cities." This enables better cold-start mitigation and cross-city generalization.
+
+**Configuration:** 128 latent components (vs. 64 for pure WARP), learning rate 0.01 (vs. 0.05), 50 epochs (vs. 30). Higher capacity and slower learning rate help the model integrate the additional feature signal without overfitting.
+
+**Feature encoding:** LightFM's `Dataset` API maps categorical features to sparse indicator vectors, which are composed with the learned latent factors during training.
+
+### 8.5 Interaction Matrix
+
+All three model-based approaches share the same customer-store interaction matrix with recency-weighted values:
+
+```
+Matrix dimensions: 39,777 customers × 776 stores (sparse)
+Values: recency-weighted visit count
+Formula: weight = visits × exp(-days_since_last_visit / 180)
+Format: scipy CSR sparse matrix
+```
+
+Each cell value combines visit frequency with temporal recency using exponential decay. A 180-day decay constant means a visit from 6 months ago retains ~37% weight, while recent visits are weighted near full strength. This allows the model to prioritize current preferences while still learning from historical patterns. Visit counts were chosen over spend amounts to avoid biasing toward expensive stores.
+
+### 8.6 Training
+
+For the live application, all models are trained at API startup via `train_all_models()` in `pipelines/collab_model.py` (~3 seconds on Apple Silicon). For offline evaluation, models are trained from scratch on training-period data only — see Section 13 for the evaluation protocol.
+
+### 8.7 Academic References
+
+- Hu, Y., Koren, Y., & Volinsky, C. (2008). Collaborative filtering for implicit feedback datasets. *ICDM*.
+- Kula, M. (2015). Metadata embeddings for user and item cold-start recommendations. *CBRecSys Workshop at RecSys*.
+- Rendle, S., Freudenthaler, C., Gantner, Z., & Schmidt-Thieme, L. (2009). BPR: Bayesian personalized ranking from implicit feedback. *UAI*.
+
+## 9. Favorites & User Interaction Data
+
+### 9.1 Purpose
 
 The favorites feature serves as a lightweight implicit feedback collection mechanism. Users can "heart" products to save them, generating preference signals that could be used for:
 
@@ -257,7 +338,7 @@ The favorites feature serves as a lightweight implicit feedback collection mecha
 - **Session-based personalization** — favorites persist across page navigations and browser sessions
 - **Evaluation data** — comparing favorited products against recommendations provides a proxy for recommendation quality
 
-### 8.2 Implementation
+### 9.2 Implementation
 
 Favorites are session-based using UUIDs stored in localStorage, requiring no authentication:
 
@@ -272,19 +353,21 @@ CREATE TABLE favorites (
 
 When a user profile is selected, the `session_id` maps to the `profile_id`, linking favorites to the profile's purchase history. Guest users receive a random UUID.
 
-## 9. Recommendation System Architecture
+## 10. Recommendation System Architecture
 
-### 9.1 Three-Tier Approach
+### 10.1 Three-Tier Approach
 
-The system combines three complementary recommendation strategies:
+The system combines four complementary recommendation strategies:
 
 1. **Content-based (CLIP embeddings)** — finds products similar by visual appearance and textual description. This is the primary recommendation engine, powering the chatbot's product search. Works for all users regardless of purchase history (no cold-start problem).
 
-2. **Store-based collaborative filtering** — finds stores with similar product mixes (item-based) or stores visited by similar customers (user-based). This layer operates at the store level to overcome product-level sparsity. Results are displayed on a dedicated Evaluation page, separate from the chatbot.
+2. **Memory-based collaborative filtering** — finds stores with similar product mixes (item-based CF) or stores visited by similar customers (user-based CF) using cosine similarity on raw interaction matrices. Displayed on the Recommender page for the selected profile.
 
-3. **Conversational AI (GPT-4o-mini)** — mediates between the user and the search engine, performing preference elicitation, query formulation, intelligent result selection, and natural language presentation.
+3. **Model-based collaborative filtering** — ALS, LightFM WARP, and LightFM Hybrid learn latent factor representations from the customer-store interaction matrix. These models generalize beyond observed co-occurrences and can incorporate side features for cold-start mitigation (see Section 8).
 
-### 9.2 Content-Based Layer (Chatbot)
+4. **Conversational AI (GPT-4o-mini)** — mediates between the user and the search engine, performing preference elicitation, query formulation, intelligent result selection, and natural language presentation.
+
+### 10.2 Content-Based Layer (Chatbot)
 
 The conversational AI layer uses GPT-4o-mini with tool calling:
 
@@ -307,16 +390,16 @@ The conversational AI layer uses GPT-4o-mini with tool calling:
 | `explain_recommendation` | Generate plain-language explanation of why a product was recommended |
 | `find_nearby_stores` | Locate physical stores for a merchant, with optional distance sorting |
 
-### 9.3 Collaborative Filtering Layer (Eval Page)
+### 10.3 Collaborative Filtering Layer
 
-The CF layer is intentionally separated from the chatbot to maintain clear boundaries between recommendation approaches:
+The CF layer is displayed on the Recommender page, intentionally separated from the chatbot to maintain clear boundaries between recommendation approaches:
 
 - **Item-based CF** — for a given profile's most-visited store, shows stores with the most similar product mix (cosine similarity on store-product vectors)
 - **User-based CF** — for a given profile's customer, shows stores visited by similar customers but not yet visited by this customer
 
-Results are displayed on the Eval page with profile selection, enabling side-by-side comparison of how different user profiles receive different store recommendations.
+Model-based CF (ALS, LightFM WARP, LightFM Hybrid) is evaluated on the Evaluation page alongside memory-based CF, enabling direct comparison across paradigms. The Recommender page displays memory-based CF results for the selected profile, while the Evaluation page shows aggregate metrics across all test users.
 
-### 9.4 Explainability
+### 10.4 Explainability
 
 When a user asks "why did you recommend this?", the system provides the LLM with:
 - The original search query
@@ -326,15 +409,16 @@ When a user asks "why did you recommend this?", the system provides the LLM with
 
 The LLM then generates a user-friendly explanation (e.g., "This was recommended because it closely matches your request for affordable cat food — it's within your budget at 9.29 EUR and is highly similar to what you described."). This approach provides transparency without exposing technical details like embedding distances.
 
-## 10. API & Frontend Design
+## 11. API & Frontend Design
 
-### 10.1 FastAPI REST API
+### 11.1 FastAPI REST API
 
 The backend is a FastAPI application that:
-- Loads the CLIP model, embedding index, and CF matrices once at startup (via lifespan context manager)
+- Loads the CLIP model, embedding index, CF matrices, and model-based CF models once at startup (via lifespan context manager)
+- Trains ALS, LightFM WARP, and LightFM Hybrid models during startup (~3 seconds)
 - Maintains a persistent SQLite connection for metadata lookups
 - Serves product images as static files
-- Provides REST endpoints for search, browsing, chatbot interaction, favorites, and collaborative filtering
+- Provides REST endpoints for search, browsing, chatbot interaction, favorites, collaborative filtering, and model evaluation
 
 **Endpoints:**
 
@@ -351,27 +435,32 @@ The backend is a FastAPI application that:
 | GET | `/api/stores/{id}/similar` | Item-based CF: similar stores |
 | GET | `/api/recommend/stores` | User-based CF: store recommendations |
 | GET | `/api/profiles` | Available user profiles |
+| GET | `/api/evaluation/results?k=5` | Model evaluation results (k=3,5,10) |
 
 The chat endpoint keeps the OpenAI API key server-side and orchestrates the tool-calling loop, preventing API key exposure in the browser.
 
-### 10.2 React Frontend
+### 11.2 React Frontend
 
 The frontend is a React 18 single-page application built with Vite and Tailwind CSS:
 
-- **ChatPage** — conversational interface with text input, image upload, inline product carousels, and store location maps. Always mounted to preserve conversation state across page navigation.
-- **BrowsePage** — paginated product grid with merchant filtering and favorites toggle
-- **MapPage** — interactive Leaflet map with store markers and merchant filtering
-- **EvalPage** — collaborative filtering dashboard with profile selection, showing side-by-side item-based and user-based store recommendations
+- **LandingPage** (`/`) — full-screen profile picker that serves as the entry point. Users must select a profile (or Guest) before accessing the app. No Navbar is shown.
+- **RecommenderPage** (`/recommend`) — unified recommendation page combining store-level CF recommendations (top section) with the conversational chatbot (bottom section). Guest users see an informational message about needing purchase history for CF.
+- **BrowsePage** (`/browse`) — paginated product grid with merchant filtering and favorites toggle
+- **MapPage** (`/map`) — interactive Leaflet map with store markers and merchant filtering
+- **EvalPage** (`/eval`) — model evaluation dashboard comparing 8 recommendation models across 6 IR metrics, with K selector (3, 5, 10) and visual bar charts
+
+All routes except `/` are protected behind a `hasSelectedProfile` gate in the session context.
 
 Key components:
 - `ProductCard` — displays product image, name, price, merchant badge, similarity score, external link, and heart button for favorites
 - `ProductCarousel` — horizontal scrollable row of product cards, rendered inline in chat messages
 - `StoreMap` — inline Leaflet map rendered alongside product carousels in chat responses
-- `ImageUpload` — file picker for image-based search
-- `ChatMessage` — chat bubble supporting text, images, product carousels, store maps, and clickable follow-up question chips
-- `ProfilePicker` — profile selection cards for the collaborative filtering demo
+- `ChatSection` — extracted chat interface (text input, image upload, message history) composed into RecommenderPage
+- `CFSection` — extracted CF recommendations display with collapsible sections for item-based and user-based results
+- `ProfilePicker` — profile selection cards, used in both LandingPage and Navbar dropdown
+- `Navbar` — navigation with profile badge dropdown (profile switcher + sign out)
 
-## 11. Multilingual Capabilities
+## 12. Multilingual Capabilities
 
 The system supports multilingual queries without explicit language detection or translation:
 
@@ -381,48 +470,89 @@ The system supports multilingual queries without explicit language detection or 
 
 This is a property of the training data distribution rather than an explicit multilingual architecture — performance may vary for underrepresented languages.
 
-## 12. Evaluation Methodology
+## 13. Evaluation Methodology
 
-### 12.1 Models Evaluated
+### 13.1 Models Evaluated
 
-The system evaluates five recommendation models to compare approaches and validate against baselines:
+The system evaluates eight recommendation models across two paradigms (memory-based and model-based CF), plus content-based and two baselines:
 
-| Model | Level | Method |
-|-------|-------|--------|
-| Content-Based (CLIP) | Product | Self-retrieval: use each product's embedding as query, relevance = same merchant |
-| Item-Based CF | Store | Leave-one-out: hold out one store per customer with 2+ visits |
-| User-Based CF | Store | Leave-one-out: same setup, using customer-store interaction matrix |
-| Random Baseline | Both | Uniform random sample of k items/stores |
-| Popularity Baseline | Both | Most-visited stores / most-common products |
+| Model | Level | Paradigm | Method |
+|-------|-------|----------|--------|
+| Content-Based (CLIP) | Product | Content-based | Self-retrieval: use each product's embedding as query, relevance = same merchant |
+| Item-Based CF | Store | Memory-based CF | Temporal split: recommend stores similar to customer's training stores |
+| User-Based CF | Store | Memory-based CF | Temporal split: recommend stores from similar customers' training history |
+| ALS | Store | Model-based CF | Temporal split: ALS latent factor recommendations trained on pre-split data |
+| LightFM WARP | Store | Model-based CF | Temporal split: LightFM WARP recommendations trained on pre-split data |
+| LightFM Hybrid | Store | Model-based CF | Temporal split: LightFM WARP + store/user side features trained on pre-split data |
+| Random Baseline | Store | Baseline | Uniform random sample of k stores (excluding already-visited) |
+| Popularity Baseline | Store | Baseline | Most-visited stores from training period (excluding already-visited) |
 
-### 12.2 Metrics
+This design enables three key comparisons:
+1. **Memory-based vs. model-based CF** — cosine similarity on raw matrices vs. learned latent factors
+2. **Pointwise vs. pairwise loss** — ALS (reconstruction loss) vs. LightFM (WARP ranking loss)
+3. **Pure CF vs. hybrid** — LightFM without features vs. LightFM with store profile side features
 
-Six standard information retrieval metrics are computed for each model:
+### 13.2 Metrics
 
-- **Precision@K** — fraction of top-k recommendations that are relevant. Measures recommendation accuracy.
-- **Recall@K** — fraction of all relevant items that appear in the top-k list. Measures completeness.
-- **nDCG@K** — normalized discounted cumulative gain. Measures ranking quality by penalizing relevant items appearing at lower positions.
-- **Hit Rate@K** — binary metric: 1 if any relevant item appears in top-k, else 0. Measures whether the system finds at least one relevant result.
-- **Coverage** — fraction of the full catalog that appears in any recommendation list across all test cases. Measures how much of the catalog the model explores.
-- **Diversity** — average pairwise dissimilarity among recommended items (1 - cosine similarity). Measures variety in recommendations.
+Six standard information retrieval metrics are computed for each model, following established formulas from the IR and RecSys literature:
 
-### 12.3 Evaluation Protocol
+- **Precision@K** — fraction of top-k recommendations that are relevant. Measures recommendation accuracy. (Manning et al., 2008)
+- **Recall@K** — fraction of all relevant items that appear in the top-k list. Measures completeness. (Manning et al., 2008)
+- **nDCG@K** — normalized discounted cumulative gain with binary relevance and log₂ discount. Measures ranking quality by penalizing relevant items appearing at lower positions. (Järvelin & Kekäläinen, 2002)
+- **Hit Rate@K** — binary metric: 1 if any relevant item appears in top-k, else 0. Measures whether the system finds at least one relevant result. (Deshpande & Karypis, 2004)
+- **Coverage** — fraction of the full catalog that appears in any recommendation list across all test cases. Measures how much of the catalog the model explores. (Adomavicius & Kwon, 2012)
+- **Diversity** — average pairwise dissimilarity among recommended items (Intra-List Diversity = 1 − cosine similarity). Measures variety in recommendations. (Ziegler et al., 2005)
 
-**Product-level (Content-Based + baselines):** For each of the 634 products, use its embedding as query, exclude itself from results, and check if same-merchant products rank in the top-k. This self-retrieval protocol tests whether the model groups products by merchant correctly — a necessary condition for meaningful cross-product recommendations.
+All metrics are implemented from scratch in `pipelines/evaluation.py` following the original formulas. Using hand-written implementations rather than a library (e.g., ranx, RecBole) was a deliberate choice for transparency, zero additional dependencies, and full control over the evaluation pipeline (temporal splits, mixed product/store-level evaluation).
 
-**Store-level (CF + baselines):** Leave-one-out cross-validation. For each customer with 2+ distinct store visits, hold out one store, generate recommendations from the remaining visits, and check whether the held-out store appears in the top-k recommendations. This directly tests the CF models' ability to predict future store visits.
+### 13.3 Evaluation Protocol: Temporal Train/Test Split
 
-### 12.4 Baseline Definitions
+**Rationale for temporal split:** An initial implementation used leave-one-out cross-validation, where one store per customer was randomly held out and the model was tested on recovering it. This protocol suffered from severe data leakage — model-based approaches (ALS, LightFM) were trained on the full interaction matrix including the held-out store, meaning their learned user embeddings already encoded the preference for the test item. This produced artificially inflated metrics (e.g., 99.9% hit rate for LightFM WARP) that did not reflect real-world predictive ability.
 
-**Random Baseline:** For each test case, uniformly sample k items/stores from the candidate set (excluding already-visited items). Provides a lower bound — any useful model should substantially outperform random selection.
+**Temporal split protocol:** To eliminate data leakage, evaluation uses a time-based train/test split:
 
-**Popularity Baseline:** Always recommend the most-visited stores (store-level) or products from the largest merchant group (product-level). Tests whether the models learn anything beyond simple frequency patterns.
+- **Train period:** All transactions before December 1, 2025
+- **Test period:** All transactions from December 1, 2025 onward
+- **Test cases:** Customers who appear in both periods AND visited at least one NEW store in the test period (a store not visited during training). This yields 1,708 test cases.
+- **Task:** Given a customer's training history, predict which new stores they will visit in the test period.
 
-### 12.5 Implementation
+This protocol guarantees that:
+1. Models are trained only on historical data (no future information leaks)
+2. All matrices (store-product, customer-store, interaction) are built from training data only
+3. Model-based CF models (ALS, LightFM) are trained from scratch on training data only
+4. The evaluation tests genuine predictive ability — predicting future store visits the model has never seen
 
-Evaluation is implemented in `pipelines/evaluation.py` and exposed via `GET /api/evaluation/results?k=5` (supports k=3, 5, 10). Results are cached in `app.state._eval_cache` to avoid recomputation. All evaluations work on matrix copies to avoid corrupting live CF matrices.
+**Product-level (Content-Based):** For each of the 634 products, use its CLIP embedding as query, exclude itself from results, and check if same-merchant products rank in the top-k. This self-retrieval protocol measures **embedding quality** — whether CLIP embeddings successfully capture merchant-level product similarity — rather than recommendation quality in the user-preference sense. The resulting 100% precision/hit rate reflects the fact that CLIP embeddings cluster strongly by merchant (shared branding, photography style, product categories), confirming that the embedding space is well-structured for product similarity search. These scores are not directly comparable to the store-level CF metrics, which measure a fundamentally different task (predicting future store visits from historical behavior).
 
-## 13. Future Work
+**Store-level (CF + baselines):** For each of the 1,708 test cases, generate top-k store recommendations using only training-period data, then check whether any of the customer's new test-period stores appear in the recommendations.
+
+### 13.4 Baseline Definitions
+
+Both baselines operate at the store level only, ensuring a fair comparison with the CF models they benchmark against:
+
+**Random Baseline:** For each test case, uniformly sample k stores from all stores excluding the customer's training-period stores. Provides a lower bound on recommendation quality.
+
+**Popularity Baseline:** Always recommend the most-visited stores from the training period (by distinct customer count), excluding stores the customer already visited. Tests whether models learn personalized patterns beyond simple aggregate frequency.
+
+### 13.5 Model Improvements
+
+Several improvements were applied to the model-based CF pipeline after initial evaluation:
+
+1. **Recency-weighted interactions** — The interaction matrix uses exponential decay (`weight = visits × exp(-days/180)`) instead of raw visit counts. This allows models to prioritize current preferences while retaining historical signal.
+
+2. **Revised hybrid features** — Merchant name was removed from the LightFM Hybrid item features because it caused the model to overfit to same-merchant recommendations, overriding the collaborative signal. User-side features (visit frequency bin, spend level bin, primary city) were added to provide behavioral context.
+
+3. **Tuned hybrid hyperparameters** — The hybrid model uses 128 latent components (vs. 64 for pure WARP), learning rate 0.01 (vs. 0.05), and 50 epochs (vs. 30) to better integrate the additional feature signal.
+
+4. **Store-level only baselines** — Baselines were changed from an average of product-level and store-level metrics to store-level only, ensuring fair comparison with the CF models they benchmark against.
+
+### 13.6 Implementation
+
+Evaluation is implemented in `pipelines/evaluation.py` with model training in `pipelines/collab_model.py`. Metric functions follow standard IR formulas with academic citations in the source code. The offline evaluation script `scripts/run_evaluation.py` generates `data/evaluation_results.json` for k=3, 5, 10. The API endpoint `GET /api/evaluation/results?k=5` serves pre-computed results from this file, avoiding expensive recomputation on each request.
+
+Training-only matrices are constructed via `build_train_store_product_matrix()`, `build_train_customer_store_matrix()`, and `build_train_interaction_matrix()` — all filtered to transactions before the split date. Model-based CF models (ALS, LightFM WARP, LightFM Hybrid) are trained fresh on these training matrices during evaluation.
+
+## 14. Future Work
 
 - **Catalog expansion** — additional merchants and product categories to test cross-domain recommendations at scale
 - **Embedding model upgrades** — larger CLIP variants (ViT-L-14) or domain-specific fine-tuning if quality improvements are needed

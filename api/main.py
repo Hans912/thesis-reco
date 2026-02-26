@@ -153,6 +153,17 @@ async def lifespan(app: FastAPI):
         app.state.sp_matrix = None
         app.state.cs_matrix = None
 
+    # Train model-based CF (LightFM WARP) for live recommendations
+    try:
+        from pipelines.collab_model import train_all_models
+
+        model_data = train_all_models(conn)
+        app.state.model_cf = model_data
+        print(f"Model-based CF trained: {model_data['interaction_matrix'].shape}", flush=True)
+    except Exception as e:
+        print(f"Model-based CF not available: {e}", flush=True)
+        app.state.model_cf = None
+
     yield
 
     conn.close()
@@ -480,36 +491,65 @@ def recommend_stores(
     )
 
 
+@app.get("/api/recommend/stores/lightfm", response_model=StoreRecommendationResponse)
+def recommend_stores_lightfm(
+    customer_id: str = Query(None, description="Customer ID"),
+    profile_id: str = Query(None, description="Profile ID to look up customer_id"),
+    top_k: int = Query(5, ge=1, le=20),
+):
+    """LightFM WARP model-based CF: recommend stores using learned latent factors."""
+    if app.state.model_cf is None:
+        raise HTTPException(status_code=503, detail="Model-based CF not available")
+
+    # Resolve customer_id from profile if needed
+    if not customer_id and profile_id:
+        profiles = _load_profiles()
+        for p in profiles:
+            if p["profile_id"] == profile_id:
+                customer_id = p.get("customer_id")
+                break
+
+    if not customer_id:
+        raise HTTPException(status_code=400, detail="customer_id or valid profile_id required")
+
+    from pipelines.collab_model import recommend_stores_lightfm as _recommend
+
+    results = _recommend(customer_id, app.state.model_cf, app.state.conn, top_k=top_k)
+    return StoreRecommendationResponse(
+        method="lightfm_warp",
+        results=[StoreRecommendation(**r) for r in results],
+    )
+
+
 # ── Evaluation ──────────────────────────────────────────────────────────
+
+_EVAL_RESULTS_PATH = ROOT / "data" / "evaluation_results.json"
+
 
 @app.get("/api/evaluation/results", response_model=EvaluationResults)
 def evaluation_results(k: int = Query(5, ge=1, le=20)):
-    """Run offline evaluation of all 5 recommendation models."""
-    # Check cache
-    cache = getattr(app.state, "_eval_cache", {})
-    if k in cache:
-        return cache[k]
+    """Serve pre-computed evaluation results from JSON file.
 
-    from pipelines.evaluation import run_full_evaluation
+    Run `python -m scripts.run_evaluation` to generate the results file.
+    """
+    if not _EVAL_RESULTS_PATH.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Evaluation results not found. Run: python -m scripts.run_evaluation",
+        )
 
-    results = run_full_evaluation(
-        matrix=app.state.matrix,
-        meta=app.state.meta,
-        sp_matrix=app.state.sp_matrix,
-        sp_store_ids=getattr(app.state, "sp_store_ids", None),
-        cs_matrix=app.state.cs_matrix,
-        cs_customer_ids=getattr(app.state, "cs_customer_ids", None),
-        cs_store_ids=getattr(app.state, "cs_store_ids", None),
-        conn=app.state.conn,
-        k=k,
-    )
+    cache = getattr(app.state, "_eval_cache", None)
+    if cache is None:
+        import json as _json_mod
+        with open(_EVAL_RESULTS_PATH) as f:
+            app.state._eval_cache = _json_mod.load(f)
+        cache = app.state._eval_cache
 
-    # Cache results
-    if not hasattr(app.state, "_eval_cache"):
-        app.state._eval_cache = {}
-    app.state._eval_cache[k] = results
+    key = str(k)
+    if key not in cache:
+        raise HTTPException(status_code=400, detail=f"No results for k={k}. Available: {list(cache.keys())}")
 
-    return results
+    return cache[key]
 
 
 # ── Profiles ────────────────────────────────────────────────────────────

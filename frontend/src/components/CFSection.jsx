@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSession } from '../context/SessionContext'
-import { Loader2, Store, Users, ShoppingBag, MapPin, ChevronDown, ChevronUp, Info } from 'lucide-react'
+import { Loader2, Store, Users, ShoppingBag, MapPin, ChevronDown, ChevronUp, Info, Sparkles } from 'lucide-react'
 
 function StoreCard({ store, rank }) {
   return (
@@ -38,6 +38,7 @@ export default function CFSection() {
   const { profile } = useSession()
   const [itemBased, setItemBased] = useState(null)
   const [userBased, setUserBased] = useState(null)
+  const [lightfm, setLightfm] = useState(null)
   const [loading, setLoading] = useState(false)
   const [topStore, setTopStore] = useState(null)
   const [expanded, setExpanded] = useState(true)
@@ -48,6 +49,7 @@ export default function CFSection() {
     if (isGuest) {
       setItemBased(null)
       setUserBased(null)
+      setLightfm(null)
       setTopStore(null)
       return
     }
@@ -61,9 +63,13 @@ export default function CFSection() {
       fetch(`/api/profiles/${profile.profile_id}/top-store`)
         .then(r => r.ok ? r.json() : null)
         .catch(() => null),
-    ]).then(async ([ubResult, topStoreResult]) => {
+      fetch(`/api/recommend/stores/lightfm?profile_id=${profile.profile_id}&top_k=8`)
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null),
+    ]).then(async ([ubResult, topStoreResult, lfmResult]) => {
       setUserBased(ubResult)
       setTopStore(topStoreResult)
+      setLightfm(lfmResult)
 
       if (topStoreResult?.store_id) {
         try {
@@ -103,7 +109,7 @@ export default function CFSection() {
               <Loader2 size={24} className="animate-spin text-gray-400" />
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* User-based CF */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
@@ -145,6 +151,28 @@ export default function CFSection() {
                 ) : (
                   <div className="text-center py-6 text-gray-400 text-sm">
                     No item-based recommendations available.
+                  </div>
+                )}
+              </div>
+
+              {/* LightFM WARP */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Sparkles size={16} className="text-rose-600" />
+                  <h3 className="text-sm font-semibold text-gray-700">LightFM WARP</h3>
+                </div>
+                <p className="text-xs text-gray-500 mb-3">
+                  Learned latent factor model optimized for top-k ranking.
+                </p>
+                {lightfm && lightfm.results.length > 0 ? (
+                  <div className="space-y-2">
+                    {lightfm.results.map((s, i) => (
+                      <StoreCard key={s.store_id} store={s} rank={i + 1} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-gray-400 text-sm">
+                    No LightFM recommendations available.
                   </div>
                 )}
               </div>
