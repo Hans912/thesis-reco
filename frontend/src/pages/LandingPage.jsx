@@ -12,10 +12,10 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-blue-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-white to-stamp-50 px-4">
       <div className="max-w-lg w-full text-center">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Product Recommender</h1>
-        <p className="text-gray-500 mb-8">
+        <h1 className="text-3xl font-bold text-stamp-900 mb-2">Product Recommender</h1>
+        <p className="text-stamp-400 mb-8">
           Select a profile to get personalized store and product recommendations, or continue as Guest.
         </p>
         <ProfilePicker selectedId={profile?.profile_id} onSelect={handleSelect} />

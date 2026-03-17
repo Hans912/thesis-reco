@@ -10,8 +10,8 @@ export default function ChatMessage({ message }) {
         <div
           className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
             isUser
-              ? 'bg-blue-600 text-white rounded-br-md'
-              : 'bg-gray-100 text-gray-900 rounded-bl-md'
+              ? 'bg-stamp-600 text-white rounded-br-md'
+              : 'bg-stamp-50 text-stamp-900 rounded-bl-md'
           }`}
         >
           {message.content}
@@ -39,7 +39,7 @@ export default function ChatMessage({ message }) {
               <button
                 key={i}
                 onClick={() => message.onQuestionClick?.(q)}
-                className="px-3 py-1.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors border border-blue-200"
+                className="px-3 py-1.5 rounded-full text-xs font-medium bg-stamp-50 text-stamp-700 hover:bg-stamp-100 transition-colors border border-stamp-200"
               >
                 {q}
               </button>

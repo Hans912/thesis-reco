@@ -1,12 +1,13 @@
 const API_BASE = '';
 
-export async function sendChatMessage(messages, imageBase64 = null) {
+export async function sendChatMessage(messages, imageBase64 = null, city = null) {
   const res = await fetch(`${API_BASE}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       messages: messages.map(m => ({ role: m.role, content: m.content })),
       image: imageBase64,
+      city: city || null,
     }),
   });
   if (!res.ok) {
@@ -38,6 +39,13 @@ export async function fetchStores({ merchant } = {}) {
   const res = await fetch(`${API_BASE}/api/stores?${params}`);
   if (!res.ok) throw new Error(`Failed to fetch stores: ${res.status}`);
   return res.json();
+}
+
+export async function fetchCities() {
+  const res = await fetch(`${API_BASE}/api/cities`);
+  if (!res.ok) throw new Error(`Failed to fetch cities: ${res.status}`);
+  const data = await res.json();
+  return data.cities;
 }
 
 export async function fetchEvaluationResults(k = 5) {

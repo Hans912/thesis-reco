@@ -153,11 +153,43 @@ async def lifespan(app: FastAPI):
         app.state.sp_matrix = None
         app.state.cs_matrix = None
 
-    # Train model-based CF (LightFM WARP) for live recommendations
+    # Build product → cities lookup for chat city filtering
+    try:
+        product_city_rows = conn.execute(
+            "SELECT DISTINCT t.product_id, sp.city FROM transactions t "
+            "JOIN store_profiles sp ON t.store_id = sp.store_id "
+            "WHERE sp.city IS NOT NULL"
+        ).fetchall()
+        product_cities: dict[str, set[str]] = {}
+        for pid, city in product_city_rows:
+            product_cities.setdefault(pid, set()).add(city.strip().title())
+        app.state.product_cities = product_cities
+        print(f"Product→city lookup: {len(product_cities)} products mapped", flush=True)
+    except Exception as e:
+        print(f"Product→city lookup not available: {e}", flush=True)
+        app.state.product_cities = {}
+
+    # Load customer demographics (if table exists)
+    demo_dict = None
+    try:
+        table_exists = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='customer_demographics'"
+        ).fetchone()
+        if table_exists:
+            from pipelines.demographic import get_customer_demographics
+            demo_dict = get_customer_demographics(conn)
+            print(f"Customer demographics loaded: {len(demo_dict)} customers", flush=True)
+        else:
+            print("customer_demographics table not found — demographic models disabled.", flush=True)
+    except Exception as e:
+        print(f"Demographics not available: {e}", flush=True)
+    app.state.demo_dict = demo_dict
+
+    # Train model-based CF for live recommendations
     try:
         from pipelines.collab_model import train_all_models
 
-        model_data = train_all_models(conn)
+        model_data = train_all_models(conn, demo_dict=demo_dict)
         app.state.model_cf = model_data
         print(f"Model-based CF trained: {model_data['interaction_matrix'].shape}", flush=True)
     except Exception as e:
@@ -333,7 +365,7 @@ async def chat_endpoint(request: ChatRequest):
             raise HTTPException(status_code=400, detail="Invalid base64 image")
 
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
-    result = await chat(messages, image_bytes, app.state)
+    result = await chat(messages, image_bytes, app.state, city=request.city)
 
     return ChatResponse(
         message=result["message"],
@@ -378,6 +410,17 @@ def list_stores(
         for r in rows
     ]
     return StoreListResponse(stores=stores)
+
+
+@app.get("/api/cities")
+def list_cities():
+    """Return sorted list of unique cities from store_profiles, title-cased."""
+    conn = app.state.conn
+    rows = conn.execute(
+        "SELECT DISTINCT city FROM store_profiles WHERE city IS NOT NULL AND city != ''"
+    ).fetchall()
+    cities = sorted({r[0].strip().title() for r in rows})
+    return {"cities": cities}
 
 
 # ── Favorites ───────────────────────────────────────────────────────────
@@ -441,17 +484,25 @@ def remove_favorite(
 # ── Collaborative Filtering ─────────────────────────────────────────────
 
 @app.get("/api/stores/{store_id}/similar", response_model=StoreRecommendationResponse)
-def get_similar_stores(store_id: str, top_k: int = Query(5, ge=1, le=20)):
+def get_similar_stores(
+    store_id: str,
+    top_k: int = Query(5, ge=1, le=20),
+    city: Optional[str] = Query(None, description="Filter results by city"),
+):
     """Item-based CF: find stores with a similar product mix."""
     if app.state.sp_matrix is None:
         raise HTTPException(status_code=503, detail="Collaborative filtering not available")
 
     from pipelines.collab import similar_stores
 
+    fetch_k = top_k * 5 if city else top_k
     results = similar_stores(
         store_id, app.state.sp_matrix, app.state.sp_store_ids,
-        app.state.conn, top_k=top_k,
+        app.state.conn, top_k=fetch_k,
     )
+    if city:
+        city_normalized = city.strip().title()
+        results = [r for r in results if r.get("city", "").strip().title() == city_normalized][:top_k]
     return StoreRecommendationResponse(
         method="item_based",
         results=[StoreRecommendation(**r) for r in results],
@@ -463,6 +514,7 @@ def recommend_stores(
     customer_id: str = Query(None, description="Customer ID from profile"),
     profile_id: str = Query(None, description="Profile ID to look up customer_id"),
     top_k: int = Query(5, ge=1, le=20),
+    city: Optional[str] = Query(None, description="Filter results by city"),
 ):
     """User-based CF: recommend stores based on co-shopping patterns."""
     if app.state.cs_matrix is None:
@@ -481,10 +533,14 @@ def recommend_stores(
 
     from pipelines.collab import recommend_stores_for_customer
 
+    fetch_k = top_k * 5 if city else top_k
     results = recommend_stores_for_customer(
         customer_id, app.state.cs_matrix, app.state.cs_customer_ids,
-        app.state.cs_store_ids, app.state.conn, top_k=top_k,
+        app.state.cs_store_ids, app.state.conn, top_k=fetch_k,
     )
+    if city:
+        city_normalized = city.strip().title()
+        results = [r for r in results if r.get("city", "").strip().title() == city_normalized][:top_k]
     return StoreRecommendationResponse(
         method="user_based",
         results=[StoreRecommendation(**r) for r in results],
@@ -496,6 +552,7 @@ def recommend_stores_lightfm(
     customer_id: str = Query(None, description="Customer ID"),
     profile_id: str = Query(None, description="Profile ID to look up customer_id"),
     top_k: int = Query(5, ge=1, le=20),
+    city: Optional[str] = Query(None, description="Filter results by city"),
 ):
     """LightFM WARP model-based CF: recommend stores using learned latent factors."""
     if app.state.model_cf is None:
@@ -514,10 +571,72 @@ def recommend_stores_lightfm(
 
     from pipelines.collab_model import recommend_stores_lightfm as _recommend
 
-    results = _recommend(customer_id, app.state.model_cf, app.state.conn, top_k=top_k)
+    fetch_k = top_k * 5 if city else top_k
+    results = _recommend(customer_id, app.state.model_cf, app.state.conn, top_k=fetch_k)
+    if city:
+        city_normalized = city.strip().title()
+        results = [r for r in results if r.get("city", "").strip().title() == city_normalized][:top_k]
     return StoreRecommendationResponse(
         method="lightfm_warp",
         results=[StoreRecommendation(**r) for r in results],
+    )
+
+
+@app.get("/api/recommend/stores/demographic", response_model=StoreRecommendationResponse)
+def recommend_stores_demographic(
+    customer_id: str = Query(None, description="Customer ID"),
+    profile_id: str = Query(None, description="Profile ID to look up customer_id"),
+    top_k: int = Query(5, ge=1, le=20),
+    city: Optional[str] = Query(None, description="Filter results by city"),
+):
+    """Demographic Popularity model: recommend stores based on demographic segment.
+
+    Uses nationality × age_bin × tourist_type to find the most-visited stores
+    among customers with a similar demographic profile.  Falls back through
+    coarser segments (nationality+age → nationality → global popularity) when
+    the target segment has fewer than 20 customers.
+
+    This is a cold-start model — it works even for new users with no purchase
+    history, making it complementary to the behavior-based CF endpoints.
+    """
+    if app.state.demo_dict is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Demographic recommendations not available. "
+                   "Run: python -m scripts.populate_customer_demographics",
+        )
+
+    if not customer_id and profile_id:
+        profiles = _load_profiles()
+        for p in profiles:
+            if p["profile_id"] == profile_id:
+                customer_id = p.get("customer_id")
+                break
+
+    if not customer_id:
+        raise HTTPException(status_code=400, detail="customer_id or valid profile_id required")
+
+    from pipelines.demographic import recommend_demographic_popularity
+    from pipelines.collab import build_store_product_matrix
+
+    store_ids = app.state.sp_store_ids if app.state.sp_matrix is not None else []
+    if not store_ids:
+        raise HTTPException(status_code=503, detail="Store data not available")
+
+    fetch_k = top_k * 5 if city else top_k
+    results = recommend_demographic_popularity(
+        customer_id, app.state.conn, app.state.demo_dict, store_ids, top_k=fetch_k,
+    )
+    if city:
+        city_normalized = city.strip().title()
+        results = [r for r in results if r.get("city", "").strip().title() == city_normalized][:top_k]
+    else:
+        results = results[:top_k]
+
+    return StoreRecommendationResponse(
+        method="demographic_popularity",
+        results=[StoreRecommendation(**{k: v for k, v in r.items() if k != "segment"})
+                 for r in results],
     )
 
 

@@ -59,6 +59,10 @@ TOOLS = [
                         "enum": ["arcaplanet", "twinset"],
                         "description": "Filter by merchant",
                     },
+                    "city": {
+                        "type": "string",
+                        "description": "Filter products to those sold at stores in this city",
+                    },
                 },
                 "required": ["query"],
             },
@@ -242,6 +246,7 @@ def _execute_tool(
     app_state: Any,
     image_bytes: bytes | None,
     last_search_context: dict,
+    city_filter: str | None = None,
 ) -> tuple[str, list[dict] | None, list[str] | None, list[dict] | None]:
     """Execute a tool call and return (result_text, products, follow_up_questions, stores)."""
 
@@ -250,6 +255,7 @@ def _execute_tool(
         min_price = tool_args.get("min_price")
         max_price = tool_args.get("max_price")
         merchant = tool_args.get("merchant")
+        city = tool_args.get("city") or city_filter
 
         results_df = search_by_text(
             query, app_state.model, app_state.tokenizer,
@@ -263,6 +269,16 @@ def _execute_tool(
         products = _df_to_product_list(results_df, app_state.conn)
         products = _filter_by_price(products, min_price, max_price)
         products = _filter_by_score(products, MIN_SCORE_THRESHOLD)
+
+        # Filter by city if specified
+        if city:
+            product_cities = getattr(app_state, "product_cities", {})
+            city_normalized = city.strip().title()
+            products = [
+                p for p in products
+                if city_normalized in product_cities.get(p["product_id"], set())
+            ]
+
         products = products[:10]
 
         last_search_context["query"] = query
@@ -382,6 +398,7 @@ async def chat(
     messages: list[dict],
     image_bytes: bytes | None,
     app_state: Any,
+    city: str | None = None,
 ) -> dict:
     """Run a chat turn with OpenAI tool calling.
 
@@ -389,7 +406,13 @@ async def chat(
     """
     client = OpenAI()
 
-    openai_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    system_content = SYSTEM_PROMPT
+    if city:
+        system_content += (
+            f"\n\nThe user is browsing from {city}. Prefer products available "
+            f"in that area. When calling search_products, pass city=\"{city}\"."
+        )
+    openai_messages = [{"role": "system", "content": system_content}]
 
     for msg in messages:
         role = msg.get("role", "user")
@@ -431,6 +454,7 @@ async def chat(
 
                 result_text, tool_products, tool_questions, tool_stores = _execute_tool(
                     fn_name, fn_args, app_state, image_bytes, last_search_context,
+                    city_filter=city,
                 )
 
                 if tool_products is not None:

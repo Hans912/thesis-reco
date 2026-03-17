@@ -47,6 +47,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     messages: List[ChatMessage]
     image: Optional[str] = None  # base64-encoded image, or null
+    city: Optional[str] = None   # city filter for product results
 
 
 class ChatProduct(BaseModel):
@@ -147,14 +148,37 @@ class ModelMetrics(BaseModel):
     hit_rate: float
     coverage: float
     diversity: float
+    novelty: Optional[float] = None  # product-level models only
 
 
 class ModelResult(BaseModel):
     name: str
     level: str  # "Product", "Store", or "Both"
     metrics: ModelMetrics
+    stats: Optional[dict] = None  # optional extra info (e.g. n_categorized for CLIP)
+
+
+class DataStats(BaseModel):
+    n_customers_train: int
+    n_stores_train: int
+    n_products: int
+    n_train_transactions: int
+    n_test_transactions: int
+    date_range_min: Optional[str] = None
+    date_range_max: Optional[str] = None
+    split_date: str
+    n_test_cases: int
+    sparsity_customer_store: float
+    sparsity_store_product: float
+    avg_stores_per_customer: float
+    avg_products_per_store: float
+    n_embeddings: int
+    embedding_dim: int
 
 
 class EvaluationResults(BaseModel):
     k: int
+    split_date: Optional[str] = None
+    n_test_cases: Optional[int] = None
+    data_stats: Optional[DataStats] = None
     models: List[ModelResult]

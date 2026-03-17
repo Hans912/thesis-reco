@@ -1,10 +1,23 @@
 @import "tailwindcss";
 
+@theme {
+  --color-stamp-50: #E6F0F2;
+  --color-stamp-100: #D0E3E7;
+  --color-stamp-200: #A8CCD3;
+  --color-stamp-300: #6FA3AE;
+  --color-stamp-400: #3A6B75;
+  --color-stamp-500: #1D4D56;
+  --color-stamp-600: #0E2B31;
+  --color-stamp-700: #0A1F23;
+  --color-stamp-800: #12262B;
+  --color-stamp-900: #0A1A1E;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: #ffffff;
-  color: #0a0a0a;
+  color: #12262B;
   -webkit-font-smoothing: antialiased;
 }
 

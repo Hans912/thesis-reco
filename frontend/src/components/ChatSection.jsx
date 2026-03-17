@@ -4,7 +4,7 @@ import ChatMessage from './ChatMessage'
 import ImageUpload from './ImageUpload'
 import { sendChatMessage } from '../api'
 
-export default function ChatSection() {
+export default function ChatSection({ city = '' }) {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
@@ -48,7 +48,7 @@ export default function ChatSection() {
         .filter((m) => !m.imagePreview || m.content !== '(image uploaded)')
         .map((m) => ({ role: m.role, content: m.content }))
 
-      const response = await sendChatMessage(chatHistory, imageBase64)
+      const response = await sendChatMessage(chatHistory, imageBase64, city || null)
 
       const assistantMessage = {
         role: 'assistant',
@@ -94,8 +94,8 @@ export default function ChatSection() {
           ))}
           {loading && (
             <div className="flex justify-start mb-4">
-              <div className="bg-gray-100 rounded-2xl rounded-bl-md px-4 py-3">
-                <Loader2 size={18} className="animate-spin text-gray-500" />
+              <div className="bg-stamp-50 rounded-2xl rounded-bl-md px-4 py-3">
+                <Loader2 size={18} className="animate-spin text-stamp-400" />
               </div>
             </div>
           )}
@@ -139,13 +139,13 @@ export default function ChatSection() {
               placeholder="Ask for product recommendations..."
               disabled={loading}
               rows={1}
-              className="w-full resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 placeholder-gray-400"
+              className="w-full resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-stamp-400 focus:border-transparent disabled:opacity-50 placeholder-gray-400"
             />
           </div>
           <button
             onClick={handleSend}
             disabled={loading || (!input.trim() && !pendingImage)}
-            className="p-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="p-2.5 rounded-xl bg-stamp-600 text-white hover:bg-stamp-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send size={18} />
           </button>

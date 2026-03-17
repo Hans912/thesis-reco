@@ -42,7 +42,7 @@ export default function Navbar() {
   return (
     <nav className="border-b border-gray-200 bg-white px-6 py-3">
       <div className="max-w-5xl mx-auto flex items-center justify-between">
-        <span className="text-lg font-semibold text-gray-900">
+        <span className="text-lg font-semibold text-stamp-900">
           Product Recommender
         </span>
         <div className="flex items-center gap-1">
@@ -53,8 +53,8 @@ export default function Navbar() {
               className={({ isActive }) =>
                 `flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   isActive
-                    ? 'bg-blue-50 text-blue-700'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    ? 'bg-stamp-50 text-stamp-700'
+                    : 'text-stamp-500 hover:text-stamp-900 hover:bg-gray-50'
                 }`
               }
             >
@@ -67,7 +67,7 @@ export default function Navbar() {
           <div className="relative ml-3" ref={dropdownRef}>
             <button
               onClick={() => setShowDropdown(!showDropdown)}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-gray-100 text-sm text-gray-700 hover:bg-gray-200 transition-colors"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-stamp-50 text-sm text-stamp-800 hover:bg-stamp-100 transition-colors"
             >
               {profile ? (
                 <>
@@ -84,7 +84,7 @@ export default function Navbar() {
 
             {showDropdown && (
               <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-200 p-4 z-50">
-                <p className="text-xs text-gray-500 mb-3 font-medium">Switch profile</p>
+                <p className="text-xs text-stamp-400 mb-3 font-medium">Switch profile</p>
                 <ProfilePicker
                   selectedId={profile?.profile_id}
                   onSelect={handleProfileSwitch}

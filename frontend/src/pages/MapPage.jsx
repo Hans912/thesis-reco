@@ -67,7 +67,7 @@ export default function MapPage() {
           <option value="arcaplanet">Arcaplanet</option>
           <option value="twinset">Twinset</option>
         </select>
-        <span className="text-sm text-gray-500">{stores.length} stores</span>
+        <span className="text-sm text-stamp-400">{stores.length} stores</span>
       </div>
 
       {loading ? (

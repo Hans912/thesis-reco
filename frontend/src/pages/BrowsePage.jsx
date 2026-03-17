@@ -66,7 +66,7 @@ export default function BrowsePage() {
           <Heart size={14} className={showFavs ? 'fill-red-500 text-red-500' : ''} />
           Favorites
         </button>
-        <span className="text-sm text-gray-500">{total} products</span>
+        <span className="text-sm text-stamp-400">{total} products</span>
       </div>
 
       {loading ? (

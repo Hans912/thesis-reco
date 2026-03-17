@@ -42,11 +42,11 @@ export default function ProductCard({ product }) {
         <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${badgeClass}`}>
           {merchant}
         </span>
-        <p className="text-sm font-medium text-gray-900 line-clamp-2 leading-tight" title={name}>
+        <p className="text-sm font-medium text-stamp-900 line-clamp-2 leading-tight" title={name}>
           {name}
         </p>
         <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-gray-900">
+          <span className="text-sm font-semibold text-stamp-900">
             {price ? `${price} ${currency || 'EUR'}` : 'N/A'}
           </span>
           {score != null && (
@@ -59,7 +59,7 @@ export default function ProductCard({ product }) {
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center justify-center gap-1 w-full py-1.5 rounded-md text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
+          className="flex items-center justify-center gap-1 w-full py-1.5 rounded-md text-xs font-medium text-stamp-500 bg-stamp-50 hover:bg-stamp-100 transition-colors"
         >
           Visit Site <ExternalLink size={12} />
         </a>
