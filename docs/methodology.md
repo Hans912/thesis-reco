@@ -11,7 +11,7 @@ The core hypothesis is that CLIP multimodal embeddings, trained on large-scale w
 ## 2. Preliminary Experiments
 
 ### 2.1 Cosine Similarity Validation (Google Colab)
-
+÷
 Before building the full pipeline, a preliminary experiment verified that CLIP ViT-B-32 embeddings can meaningfully match text queries to product images.
 
 **Test setup:** Encoded the text query "black converse high top sneaker with white sole" and computed cosine similarity against four product images.

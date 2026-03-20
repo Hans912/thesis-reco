@@ -1,0 +1,271 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 640" width="960" height="640"
+     font-family="Arial, Helvetica, sans-serif">
+
+  <defs>
+    <!-- Solid arrowhead -->
+    <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L0,7 L9,3.5 z" fill="#444"/>
+    </marker>
+    <!-- Open arrowhead (dependency) -->
+    <marker id="arrOpen" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L9,3.5 L0,7" stroke="#444" stroke-width="1.2" fill="none"/>
+    </marker>
+    <!-- Red dashed arrowhead -->
+    <marker id="arrRed" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L0,7 L9,3.5 z" fill="#B22222"/>
+    </marker>
+    <!-- Blue arrowhead (to storage) -->
+    <marker id="arrBlue" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L0,7 L9,3.5 z" fill="#0277BD"/>
+    </marker>
+    <!-- Left-pointing arrowhead for bidirectional -->
+    <marker id="arrLeft" markerWidth="9" markerHeight="9" refX="2" refY="3.5" orient="auto">
+      <path d="M9,0 L9,7 L0,3.5 z" fill="#444"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="960" height="640" fill="#F8F8F8"/>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- Title                                                     -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <text x="480" y="30" text-anchor="middle" font-size="15" font-weight="bold" fill="#1a1a1a">
+    Figure 3. Component Diagram
+  </text>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- REACT FRONTEND  (left column)                            -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <rect x="22" y="55" width="162" height="490" rx="7"
+        fill="#D6E4F7" stroke="#2E75B6" stroke-width="1.8"/>
+  <!-- stereotype -->
+  <text x="103" y="74" text-anchor="middle" font-size="9" fill="#2E75B6">«component»</text>
+  <text x="103" y="89" text-anchor="middle" font-size="12" font-weight="bold" fill="#1F497D">React</text>
+  <text x="103" y="103" text-anchor="middle" font-size="12" font-weight="bold" fill="#1F497D">Frontend</text>
+
+  <!-- Divider -->
+  <line x1="22" y1="112" x2="184" y2="112" stroke="#2E75B6" stroke-width="0.8" stroke-dasharray="3,2"/>
+
+  <!-- Sub-component boxes inside Frontend -->
+  <rect x="34" y="120" width="138" height="42" rx="4" fill="#EAF2FB" stroke="#5B9BD5" stroke-width="1"/>
+  <text x="103" y="136" text-anchor="middle" font-size="9.5" font-weight="bold" fill="#1F497D">Chat Interface</text>
+  <text x="103" y="150" text-anchor="middle" font-size="8.5" fill="#2E75B6">Conversational UI</text>
+  <text x="103" y="161" text-anchor="middle" font-size="8" fill="#2E75B6">image upload · city filter</text>
+
+  <rect x="34" y="172" width="138" height="42" rx="4" fill="#EAF2FB" stroke="#5B9BD5" stroke-width="1"/>
+  <text x="103" y="188" text-anchor="middle" font-size="9.5" font-weight="bold" fill="#1F497D">Product Carousel</text>
+  <text x="103" y="202" text-anchor="middle" font-size="8.5" fill="#2E75B6">CLIP results display</text>
+  <text x="103" y="213" text-anchor="middle" font-size="8" fill="#2E75B6">favorites · similarity links</text>
+
+  <rect x="34" y="224" width="138" height="42" rx="4" fill="#EAF2FB" stroke="#5B9BD5" stroke-width="1"/>
+  <text x="103" y="240" text-anchor="middle" font-size="9.5" font-weight="bold" fill="#1F497D">Store CF Panel</text>
+  <text x="103" y="254" text-anchor="middle" font-size="8.5" fill="#2E75B6">store recommendations</text>
+  <text x="103" y="265" text-anchor="middle" font-size="8" fill="#2E75B6">profile selector · city filter</text>
+
+  <rect x="34" y="276" width="138" height="42" rx="4" fill="#EAF2FB" stroke="#5B9BD5" stroke-width="1"/>
+  <text x="103" y="292" text-anchor="middle" font-size="9.5" font-weight="bold" fill="#1F497D">Store Map</text>
+  <text x="103" y="306" text-anchor="middle" font-size="8.5" fill="#2E75B6">geographic view</text>
+  <text x="103" y="317" text-anchor="middle" font-size="8" fill="#2E75B6">store location markers</text>
+
+  <rect x="34" y="328" width="138" height="42" rx="4" fill="#EAF2FB" stroke="#5B9BD5" stroke-width="1"/>
+  <text x="103" y="344" text-anchor="middle" font-size="9.5" font-weight="bold" fill="#1F497D">Evaluation Dashboard</text>
+  <text x="103" y="358" text-anchor="middle" font-size="8.5" fill="#2E75B6">HR · nDCG · Precision</text>
+  <text x="103" y="369" text-anchor="middle" font-size="8" fill="#2E75B6">Recall · Coverage · ILD</text>
+
+  <!-- Interface label -->
+  <text x="103" y="410" text-anchor="middle" font-size="9" fill="#1F497D" font-style="italic">Vite + React 18</text>
+  <text x="103" y="425" text-anchor="middle" font-size="9" fill="#1F497D" font-style="italic">axios / fetch</text>
+  <text x="103" y="440" text-anchor="middle" font-size="8.5" fill="#2E75B6">localhost:5173</text>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- REST arrow (bidirectional) between Frontend and FastAPI  -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <line x1="184" y1="290" x2="228" y2="290" stroke="#444" stroke-width="1.6" marker-end="url(#arr)"/>
+  <line x1="228" y1="302" x2="184" y2="302" stroke="#444" stroke-width="1.6" marker-end="url(#arr)"/>
+  <rect x="183" y="272" width="46" height="10" fill="#F8F8F8"/>
+  <text x="206" y="280" text-anchor="middle" font-size="8" fill="#333">REST</text>
+  <text x="206" y="318" text-anchor="middle" font-size="8" fill="#333">JSON</text>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- FASTAPI BACKEND  (centre, large container)               -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <rect x="228" y="55" width="510" height="490" rx="7"
+        fill="#F0F0F0" stroke="#595959" stroke-width="2"/>
+  <text x="483" y="75" text-anchor="middle" font-size="9" fill="#595959">«component»</text>
+  <text x="483" y="90" text-anchor="middle" font-size="13" font-weight="bold" fill="#262626">FastAPI Backend</text>
+  <text x="483" y="105" text-anchor="middle" font-size="9" fill="#595959">api/main.py · uvicorn · Python 3.12</text>
+  <line x1="228" y1="112" x2="738" y2="112" stroke="#595959" stroke-width="0.8" stroke-dasharray="3,2"/>
+
+  <!-- ── CLIP ENGINE (top-left inside FastAPI) ───────────────── -->
+  <rect x="244" y="122" width="228" height="192" rx="6"
+        fill="#FEF4E8" stroke="#E36C09" stroke-width="1.6"/>
+  <text x="358" y="140" text-anchor="middle" font-size="9" fill="#E36C09">«component»</text>
+  <text x="358" y="155" text-anchor="middle" font-size="11" font-weight="bold" fill="#843C00">CLIP Engine</text>
+  <text x="358" y="168" text-anchor="middle" font-size="8.5" fill="#6E3100">pipelines/search.py · embed.py</text>
+  <line x1="244" y1="174" x2="472" y2="174" stroke="#E36C09" stroke-width="0.7" stroke-dasharray="3,2"/>
+
+  <text x="358" y="190" text-anchor="middle" font-size="8.5" fill="#843C00" font-weight="bold">OpenCLIP ViT-B/32</text>
+  <text x="358" y="204" text-anchor="middle" font-size="8" fill="#843C00">laion2b_s34b_b79k pretrained</text>
+  <text x="358" y="218" text-anchor="middle" font-size="8" fill="#843C00">512-dim text + image encoder</text>
+  <text x="358" y="232" text-anchor="middle" font-size="8" fill="#843C00">fused embedding: (img + text) / 2</text>
+  <text x="358" y="246" text-anchor="middle" font-size="8" fill="#843C00">L2-normalised → cosine similarity</text>
+  <text x="358" y="260" text-anchor="middle" font-size="8" fill="#843C00">brute-force matrix multiply (numpy)</text>
+  <text x="358" y="278" text-anchor="middle" font-size="8" fill="#6E3100" font-style="italic">loaded at API startup · GPU/CPU</text>
+  <text x="358" y="292" text-anchor="middle" font-size="8" fill="#6E3100" font-style="italic">serves: /api/search/text  /api/search/image</text>
+  <text x="358" y="306" text-anchor="middle" font-size="8" fill="#6E3100" font-style="italic">      /api/products/{id}/similar</text>
+
+  <!-- ── LLM TOOL-CALLING LOOP (bottom-left inside FastAPI) ─── -->
+  <rect x="244" y="326" width="228" height="198" rx="6"
+        fill="#FDECEA" stroke="#B22222" stroke-width="1.6"/>
+  <text x="358" y="345" text-anchor="middle" font-size="9" fill="#B22222">«component»</text>
+  <text x="358" y="360" text-anchor="middle" font-size="11" font-weight="bold" fill="#7B0000">LLM Tool-Calling</text>
+  <text x="358" y="374" text-anchor="middle" font-size="11" font-weight="bold" fill="#7B0000">Loop</text>
+  <text x="358" y="387" text-anchor="middle" font-size="8.5" fill="#9B0000">api/chat.py</text>
+  <line x1="244" y1="393" x2="472" y2="393" stroke="#B22222" stroke-width="0.7" stroke-dasharray="3,2"/>
+
+  <text x="358" y="410" text-anchor="middle" font-size="8.5" fill="#7B0000" font-weight="bold">GPT-4o-mini (OpenAI API)</text>
+  <text x="358" y="424" text-anchor="middle" font-size="8" fill="#9B0000">max 8 tool-call iterations / turn</text>
+  <text x="358" y="440" text-anchor="middle" font-size="8" fill="#9B0000">tools: search_products · search_by_image</text>
+  <text x="358" y="454" text-anchor="middle" font-size="8" fill="#9B0000">       select_products · ask_preferences</text>
+  <text x="358" y="468" text-anchor="middle" font-size="8" fill="#9B0000">       explain_recommendation</text>
+  <text x="358" y="482" text-anchor="middle" font-size="8" fill="#9B0000">       find_nearby_stores</text>
+  <text x="358" y="500" text-anchor="middle" font-size="8" fill="#7B0000" font-style="italic">serves: POST /api/chat</text>
+
+  <!-- Internal arrow: LLM Loop → CLIP Engine (tool dispatch) -->
+  <line x1="358" y1="326" x2="358" y2="314" stroke="#B22222" stroke-width="1.4"
+        stroke-dasharray="5,2" marker-end="url(#arrRed)"/>
+  <text x="410" y="323" font-size="8" fill="#B22222">tool dispatch</text>
+
+  <!-- ── CF + DEMOGRAPHIC MODELS (right inside FastAPI) ──────── -->
+  <rect x="488" y="122" width="238" height="402" rx="6"
+        fill="#EDE7F6" stroke="#7030A0" stroke-width="1.6"/>
+  <text x="607" y="140" text-anchor="middle" font-size="9" fill="#7030A0">«component»</text>
+  <text x="607" y="155" text-anchor="middle" font-size="11" font-weight="bold" fill="#4A148C">CF &amp; Demographic</text>
+  <text x="607" y="169" text-anchor="middle" font-size="11" font-weight="bold" fill="#4A148C">Models</text>
+  <text x="607" y="182" text-anchor="middle" font-size="8.5" fill="#6A1B9A">collab.py · collab_model.py · demographic.py</text>
+  <line x1="488" y1="188" x2="726" y2="188" stroke="#7030A0" stroke-width="0.7" stroke-dasharray="3,2"/>
+
+  <!-- Memory-based sub-box -->
+  <rect x="500" y="196" width="214" height="76" rx="4" fill="#D7C8F0" stroke="#7030A0" stroke-width="1"/>
+  <text x="607" y="211" text-anchor="middle" font-size="9" font-weight="bold" fill="#4A148C">Memory-Based CF</text>
+  <text x="607" y="225" text-anchor="middle" font-size="8" fill="#4A148C">Item-Based CF  (store–product cosine sim)</text>
+  <text x="607" y="239" text-anchor="middle" font-size="8" fill="#4A148C">User-Based CF  (customer–store cosine sim)</text>
+  <text x="607" y="253" text-anchor="middle" font-size="8" fill="#6A1B9A">sparse matrix · pairwise similarity</text>
+  <text x="607" y="265" text-anchor="middle" font-size="7.5" fill="#7030A0">serves: GET /api/stores/{id}/similar</text>
+
+  <!-- Model-based sub-box -->
+  <rect x="500" y="282" width="214" height="100" rx="4" fill="#D7C8F0" stroke="#7030A0" stroke-width="1"/>
+  <text x="607" y="297" text-anchor="middle" font-size="9" font-weight="bold" fill="#4A148C">Model-Based CF</text>
+  <text x="607" y="311" text-anchor="middle" font-size="8" fill="#4A148C">ALS — 64 factors (implicit library)</text>
+  <text x="607" y="325" text-anchor="middle" font-size="8" fill="#4A148C">LightFM WARP — 64 components</text>
+  <text x="607" y="339" text-anchor="middle" font-size="8" fill="#4A148C">LightFM Hybrid — 128 components</text>
+  <text x="607" y="353" text-anchor="middle" font-size="8" fill="#6A1B9A">recency-weighted interaction matrix</text>
+  <text x="607" y="365" text-anchor="middle" font-size="7.5" fill="#7030A0">serves: GET /api/recommend/stores/lightfm</text>
+  <text x="607" y="377" text-anchor="middle" font-size="7.5" fill="#7030A0">        GET /api/recommend/stores</text>
+
+  <!-- Demographic sub-box -->
+  <rect x="500" y="392" width="214" height="112" rx="4" fill="#D7C8F0" stroke="#7030A0" stroke-width="1"/>
+  <text x="607" y="407" text-anchor="middle" font-size="9" font-weight="bold" fill="#4A148C">Demographic Models</text>
+  <text x="607" y="422" text-anchor="middle" font-size="8" fill="#4A148C">Demographic Popularity</text>
+  <text x="607" y="435" text-anchor="middle" font-size="8" fill="#6A1B9A">  nationality × age × tourist_type</text>
+  <text x="607" y="449" text-anchor="middle" font-size="8" fill="#4A148C">LightFM Demo  (side features only)</text>
+  <text x="607" y="463" text-anchor="middle" font-size="8" fill="#4A148C">LightFM Full Hybrid  (behav. + demo)</text>
+  <text x="607" y="478" text-anchor="middle" font-size="8" fill="#6A1B9A">cold-start · fallback hierarchy</text>
+  <text x="607" y="492" text-anchor="middle" font-size="7.5" fill="#7030A0">serves: GET /api/recommend/stores/demographic</text>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- Arrows: FastAPI → Storage                                 -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+
+  <!-- CLIP → NumPy (reads embeddings) -->
+  <line x1="738" y1="210" x2="790" y2="210" stroke="#0277BD" stroke-width="1.4" marker-end="url(#arrBlue)"/>
+  <text x="764" y="204" text-anchor="middle" font-size="7.5" fill="#0277BD">reads</text>
+
+  <!-- CLIP → SQLite (reads product metadata) -->
+  <line x1="738" y1="260" x2="790" y2="260" stroke="#0277BD" stroke-width="1.4" marker-end="url(#arrBlue)"/>
+  <text x="764" y="254" text-anchor="middle" font-size="7.5" fill="#0277BD">reads</text>
+
+  <!-- CF → SQLite (reads transactions + demographics) -->
+  <line x1="738" y1="370" x2="790" y2="370" stroke="#0277BD" stroke-width="1.4" marker-end="url(#arrBlue)"/>
+  <text x="764" y="364" text-anchor="middle" font-size="7.5" fill="#0277BD">reads</text>
+
+  <!-- CF → SQLite (demographics) -->
+  <line x1="738" y1="450" x2="790" y2="450" stroke="#0277BD" stroke-width="1.4" marker-end="url(#arrBlue)"/>
+  <text x="764" y="444" text-anchor="middle" font-size="7.5" fill="#0277BD">reads</text>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- STORAGE LAYER  (right column)                            -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <rect x="790" y="55" width="152" height="490" rx="7"
+        fill="#E8E8E8" stroke="#7F7F7F" stroke-width="1.8"/>
+  <text x="866" y="74" text-anchor="middle" font-size="9" fill="#7F7F7F">«storage»</text>
+  <text x="866" y="89" text-anchor="middle" font-size="12" font-weight="bold" fill="#404040">Storage</text>
+  <text x="866" y="103" text-anchor="middle" font-size="12" font-weight="bold" fill="#404040">Layer</text>
+  <line x1="790" y1="112" x2="942" y2="112" stroke="#7F7F7F" stroke-width="0.8" stroke-dasharray="3,2"/>
+
+  <!-- SQLite box -->
+  <rect x="802" y="120" width="128" height="196" rx="5" fill="#D8D8D8" stroke="#999" stroke-width="1.2"/>
+  <text x="866" y="138" text-anchor="middle" font-size="9.5" font-weight="bold" fill="#333">catalog.sqlite</text>
+  <line x1="802" y1="144" x2="930" y2="144" stroke="#999" stroke-width="0.6"/>
+  <text x="866" y="158" text-anchor="middle" font-size="8.5" fill="#444" font-weight="bold">transactions</text>
+  <text x="866" y="170" text-anchor="middle" font-size="8" fill="#666">80k+ rows · 2 years</text>
+  <text x="866" y="184" text-anchor="middle" font-size="8.5" fill="#444" font-weight="bold">products</text>
+  <text x="866" y="196" text-anchor="middle" font-size="8" fill="#666">634 items · 2 merchants</text>
+  <text x="866" y="210" text-anchor="middle" font-size="8.5" fill="#444" font-weight="bold">stores</text>
+  <text x="866" y="222" text-anchor="middle" font-size="8" fill="#666">776 locations · lat/lng</text>
+  <text x="866" y="236" text-anchor="middle" font-size="8.5" fill="#444" font-weight="bold">customer_demographics</text>
+  <text x="866" y="248" text-anchor="middle" font-size="8" fill="#666">39,777 customers</text>
+  <text x="866" y="262" text-anchor="middle" font-size="8" fill="#666">nationality · age · type</text>
+  <text x="866" y="276" text-anchor="middle" font-size="8.5" fill="#444" font-weight="bold">favorites</text>
+  <text x="866" y="288" text-anchor="middle" font-size="8" fill="#666">session-based wishlist</text>
+  <text x="866" y="306" text-anchor="middle" font-size="8" fill="#595959" font-style="italic">SQLite3 · read at startup</text>
+
+  <!-- NumPy box -->
+  <rect x="802" y="330" width="128" height="116" rx="5" fill="#D8D8D8" stroke="#999" stroke-width="1.2"/>
+  <text x="866" y="348" text-anchor="middle" font-size="9.5" font-weight="bold" fill="#333">catalog_embeddings</text>
+  <text x="866" y="360" text-anchor="middle" font-size="9" font-weight="bold" fill="#333">.npy</text>
+  <line x1="802" y1="366" x2="930" y2="366" stroke="#999" stroke-width="0.6"/>
+  <text x="866" y="380" text-anchor="middle" font-size="8.5" fill="#444">634 × 512  float32</text>
+  <text x="866" y="394" text-anchor="middle" font-size="8" fill="#666">OpenCLIP ViT-B/32</text>
+  <text x="866" y="408" text-anchor="middle" font-size="8" fill="#666">L2-normalised · pre-computed</text>
+  <text x="866" y="422" text-anchor="middle" font-size="8" fill="#666">catalog_meta.parquet</text>
+  <text x="866" y="436" text-anchor="middle" font-size="8" fill="#666">product metadata index</text>
+
+  <!-- External OpenAI box -->
+  <rect x="802" y="460" width="128" height="68" rx="5" fill="#FFF9C4" stroke="#F9A825" stroke-width="1.2"/>
+  <text x="866" y="476" text-anchor="middle" font-size="9" fill="#F9A825">«external»</text>
+  <text x="866" y="491" text-anchor="middle" font-size="9.5" font-weight="bold" fill="#6D4C00">OpenAI API</text>
+  <text x="866" y="506" text-anchor="middle" font-size="8" fill="#7D5400">GPT-4o-mini</text>
+  <text x="866" y="518" text-anchor="middle" font-size="8" fill="#7D5400">HTTPS · tool_choice=auto</text>
+
+  <!-- LLM → OpenAI arrow -->
+  <line x1="738" y1="490" x2="800" y2="490" stroke="#B22222" stroke-width="1.4"
+        stroke-dasharray="5,2" marker-end="url(#arrRed)"/>
+  <text x="769" y="484" text-anchor="middle" font-size="7.5" fill="#B22222">HTTPS</text>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- Legend                                                   -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <rect x="22" y="568" width="916" height="54" rx="4" fill="none" stroke="#CCCCCC" stroke-width="0.8"/>
+  <text x="32" y="584" font-size="9" font-weight="bold" fill="#444">Legend:</text>
+  <!-- solid line -->
+  <line x1="85" y1="580" x2="115" y2="580" stroke="#444" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="120" y="584" font-size="8.5" fill="#444">REST / data flow</text>
+  <!-- dashed red -->
+  <line x1="230" y1="580" x2="260" y2="580" stroke="#B22222" stroke-width="1.5" stroke-dasharray="5,2" marker-end="url(#arrRed)"/>
+  <text x="265" y="584" font-size="8.5" fill="#B22222">internal tool dispatch (LLM → CLIP)</text>
+  <!-- blue -->
+  <line x1="480" y1="580" x2="510" y2="580" stroke="#0277BD" stroke-width="1.5" marker-end="url(#arrBlue)"/>
+  <text x="515" y="584" font-size="8.5" fill="#0277BD">storage read (startup or per-request)</text>
+  <!-- dashed yellow -->
+  <line x1="700" y1="580" x2="730" y2="580" stroke="#F9A825" stroke-width="1.5" stroke-dasharray="5,2"/>
+  <text x="735" y="584" font-size="8.5" fill="#7D5400">external API call</text>
+
+  <text x="32" y="608" font-size="8" fill="#777">
+    CF matrices and LightFM models are trained from the SQLite transaction history at API startup.
+    CLIP embeddings are pre-computed and loaded into RAM as a NumPy matrix (634 × 512).
+  </text>
+
+</svg>
